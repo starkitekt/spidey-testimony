@@ -1,0 +1,2978 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spidey Testimonials</title>
+<link rel="icon" type="application/pdf" href="favicon.pdf">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<meta property="og:title" content="Spidey Testimonials">
+<meta property="og:description" content="Spider-Man Interactive 3D Testimonial Clothesline">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet">
+<!--
+  Testimonial clothesline, as one lit 3D scene.
+
+  A mouse leans in from the left edge of the frame and hauls a rope hand over hand. The
+  testimonial cards hang from that rope on loops like laundry: each card is a real cloth
+  mesh (24x14 quads) pinned at its two top corners, so it ripples, billows and furls its
+  free edge in a travelling wind field, with lighting and shadow following the deformation.
+  Dragging (or arrows / dots) makes him pull: the active card travels off canvas and the one
+  peeking at the right takes its place.
+
+  Everything in the stage is WebGL — rope (three helically wound strands over a core, real
+  braid geometry), cards (cloth), character. Card text
+  is painted to a canvas texture; the same text is in the DOM, visually hidden, for screen
+  readers.
+
+  Needs vendor/three.bundle.js beside this file: three.js repacked as a classic script,
+  because ES-module imports do not work over file://.
+
+  The puller is a rigged humanoid GLB (skeleton only — its animations were stripped). It is
+  posed entirely by poseHuman(): hips drop and travel back under load, the lean is spread
+  over three spine joints, arms are solved with CCD IK onto two grip points that slide along
+  the rope hand over hand, and the legs are solved onto planted feet so the knees absorb the
+  weight shift. Swap in your own character by replacing assets/puller.glb.js — any standard
+  humanoid rig works, the bone lookup strips a `mixamorig` prefix.
+
+  Sample testimonial copy below is placeholder — replace DATA.
+-->
+<style>
+:root{
+  color-scheme: light;
+  --cream:#DCEFFB;
+  --cream-2:#C2E4F9;
+  --ink:#0F1D2A;
+  --ink-soft:#3D566E;
+  --terra:#E12D20;
+}
+*{box-sizing:border-box;margin:0;padding:0;letter-spacing:-0.03em}
+html,body{margin:0;overflow:hidden;font-style:normal}
+body{
+  background: #f4f0e8;
+  background-image: radial-gradient(120% 90% at 50% 10%, #faf7f2 0%, #ede7dc 100%);
+  color:var(--ink);
+  font-family:'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+  font-style:normal;
+  letter-spacing:-0.03em;
+  height:100vh;
+  height:100dvh;
+  padding:24px;
+  margin:0;
+  box-sizing:border-box;
+  overflow:hidden;
+}
+em, i{font-style:normal}
+
+/* The scene rectangle 24 points off from screen edges - rounded corners, paper feel */
+.rope-section{
+  width:100%;margin:0;padding:0;
+  display:flex;flex-direction:column;
+  height:calc(100vh - 48px);height:calc(100dvh - 48px);max-height:calc(100vh - 48px);
+  overflow:hidden;
+  border:none;
+  border-radius:24px;
+  box-shadow:none;
+  position:relative;
+  background:transparent;
+}
+
+.stage{
+  position:relative;
+  width:100%;
+  height:100%;
+  flex:1 1 auto;
+  min-height:100%;
+  overflow:hidden;
+  touch-action:pan-y;
+  cursor:grab;
+  user-select:none;-webkit-user-select:none;
+  background:transparent;
+  border:none;
+  box-shadow:none;
+  border-radius:24px;
+}
+.stage::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:radial-gradient(ellipse 90% 80% at 50% 50%, transparent 40%, rgba(180,165,145,0.18) 100%);
+  pointer-events:none;
+  z-index:1;
+}
+
+/* Heading on top right overlay: 48 points away from top & right edges, two lines, bold with crimson highlights */
+/* Heading on top right overlay: responsive positioning and fluid clamp typography */
+.stage-heading{
+  position:absolute;
+  top:max(20px, 4vh);
+  right:max(20px, 4vw);
+  z-index:10;
+  pointer-events:none;
+}
+.stage-heading h2{
+  font-family:'Plus Jakarta Sans', sans-serif;
+  font-weight:700;
+  font-style:normal;
+  font-size:clamp(17px, 3.2vw, 38px);
+  line-height:1.18;
+  letter-spacing:-0.05em;
+  color:#101010;
+  margin:0;
+  display:inline-flex;
+  flex-direction:column;
+  align-items:stretch;
+}
+.stage-heading .heading-line{
+  display:block;
+  white-space:nowrap;
+}
+.stage-heading .line-1{
+  text-align:right;
+}
+.stage-heading .line-2{
+  display:flex;
+  justify-content:space-between;
+  width:100%;
+}
+.stage-heading .crimson{
+  color:#C22A1E;
+  font-weight:700;
+  letter-spacing:-0.05em;
+}
+.bridge-backdrop{
+  position:absolute;
+  inset:0;
+  background: url('assets/golden-gate.jpg') center 18% / cover no-repeat;
+  opacity: 1.0;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  /* softened toward an overcast, hazy day so the drifting fog reads as part of the scene */
+  filter: saturate(0.98) brightness(1.06) contrast(0.99);
+  transition: background-image 0.6s ease, opacity 0.6s ease;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.80) 100%);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.80) 100%);
+}
+.bridge-backdrop.fade-out{opacity:0}
+
+/* Drifting fog/cloud banks over the bridge to bring it alive. Sits between the backdrop and the
+   WebGL canvas, so it hazes the bridge and water but never Spider-Man or the cards. Pure CSS —
+   two GPU-composited layers drifting at different speeds (parallax) — so it costs almost nothing
+   on low-end devices. Masked to the horizon-and-water band; the heading up top stays clear. */
+.bridge-fog{
+  position:absolute; inset:0;
+  pointer-events:none;
+  overflow:hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 20%, rgba(0,0,0,.75) 42%, #000 70%, rgba(0,0,0,.55) 100%);
+  mask-image: linear-gradient(to bottom, transparent 20%, rgba(0,0,0,.75) 42%, #000 70%, rgba(0,0,0,.55) 100%);
+}
+.bridge-fog::before, .bridge-fog::after{
+  content:""; position:absolute; inset:-25% -35%;
+  background-repeat:no-repeat;
+  will-change: transform;
+}
+.bridge-fog::before{
+  background:
+    radial-gradient(38% 30% at 18% 58%, rgba(255,255,255,.55), transparent 62%),
+    radial-gradient(30% 24% at 52% 50%, rgba(238,244,250,.46), transparent 64%),
+    radial-gradient(42% 30% at 84% 64%, rgba(255,255,255,.50), transparent 62%);
+  filter: blur(16px);
+  opacity:.92;
+  animation: fogDriftA 52s ease-in-out infinite;
+}
+.bridge-fog::after{
+  background:
+    radial-gradient(34% 26% at 34% 70%, rgba(255,255,255,.40), transparent 62%),
+    radial-gradient(40% 28% at 72% 60%, rgba(228,236,244,.38), transparent 64%),
+    radial-gradient(28% 22% at 6% 74%, rgba(255,255,255,.36), transparent 60%);
+  filter: blur(26px);
+  opacity:.8;
+  animation: fogDriftB 78s ease-in-out infinite;
+}
+@keyframes fogDriftA{
+  0%   { transform: translate3d(-7%, 0.5%, 0); }
+  50%  { transform: translate3d( 7%, -2%,  0); }
+  100% { transform: translate3d(-7%, 0.5%, 0); }
+}
+@keyframes fogDriftB{
+  0%   { transform: translate3d( 6%, -1%, 0); }
+  50%  { transform: translate3d(-6%,  1.5%, 0); }
+  100% { transform: translate3d( 6%, -1%, 0); }
+}
+@media (prefers-reduced-motion: reduce){
+  .bridge-fog::before, .bridge-fog::after{ animation: none; }
+}
+.stage:active{cursor:grabbing}
+.stage:focus-visible{outline:2px solid var(--terra);outline-offset:4px}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+/* Navigation dots overlay at bottom center */
+.dots{
+  position:absolute;
+  bottom:max(14px, 2.5vh);
+  left:50%;
+  transform:translateX(-50%);
+  z-index:10;
+  display:flex;gap:8px;align-items:center;
+  padding:8px 16px;
+  background:rgba(255,255,255,0.45);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.6);
+  box-shadow:0 4px 16px rgba(0,0,0,0.08);
+}
+.dot{width:8px;height:8px;padding:0;border:0;border-radius:50%;background:rgba(90,66,40,.32);cursor:pointer;
+  transition:width .25s cubic-bezier(.2,.8,.2,1),background .25s ease}
+.dot[aria-current="true"]{width:26px;border-radius:5px;background:var(--terra)}
+.dot:active{transform:scale(.9)}
+.dot:focus-visible{outline:2px solid var(--terra);outline-offset:3px}
+
+/* Audio play control floating overlay inside the stage */
+.play-controls-overlay{
+  position:absolute;
+  bottom:max(14px, 2.5vh);
+  left:max(14px, 2.5vw);
+  z-index:10;
+  display:flex;align-items:center;gap:12px;
+  padding:6px 16px 6px 8px;
+  background:rgba(255,255,255,0.55);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.6);
+  box-shadow:0 4px 16px rgba(0,0,0,0.08);
+}
+.play-label{
+  font-size:12px;font-weight:600;letter-spacing:-0.03em;color:var(--ink-soft);
+  font-style:normal;
+  white-space:nowrap;
+  max-width:min(44vw, 250px);
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+@media (max-width:640px){
+  .rope-section{ height:calc(100dvh - 24px); border-radius:16px; }
+  .stage{ border-radius:16px; }
+  .stage-heading{ top:16px; right:16px; }
+  .play-controls-overlay{ left:12px; bottom:12px; gap:8px; padding:5px 12px 5px 6px; }
+  .play-label{ max-width:min(38vw, 140px); font-size:11px; }
+  .dots{ bottom:12px; padding:6px 12px; }
+  .image-credit{ display:none; }
+}
+.play-btn{
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  border:none;background:var(--terra);color:#fff;
+  display:grid;place-items:center;cursor:pointer;
+  transition:transform .18s ease,box-shadow .18s ease;
+  box-shadow:0 4px 14px rgba(225,45,32,.34);
+}
+.play-btn:hover{transform:scale(1.06);box-shadow:0 6px 18px rgba(225,45,32,.42)}
+.play-btn:active{transform:scale(.95)}
+.play-btn:focus-visible{outline:2px solid var(--terra);outline-offset:3px}
+.play-btn svg{width:14px;height:14px;fill:#fff;grid-area:1/1;display:none}
+.play-btn .icon-play{margin-left:2px}
+.play-btn:not(.is-playing) .icon-play{display:block}
+.play-btn.is-playing .icon-pause{display:block}
+
+/* Image Credit Overlay on bottom right of stage viewport */
+.image-credit{
+  position:absolute;
+  bottom:20px;
+  right:24px;
+  z-index:10;
+  font-family:'Plus Jakarta Sans', sans-serif;
+  font-style:normal;
+  font-size:8pt;
+  color:rgba(15,29,42,0.72);
+  letter-spacing:-0.03em;
+  pointer-events:none;
+  user-select:none;
+}
+
+.hint{font-size:12px;color:var(--ink-soft);display:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.fallback{display:none;padding:24px;font-size:14px;line-height:1.6;color:var(--ink-soft)}
+.no-webgl .fallback{display:block}
+.no-webgl #gl{display:none}
+</style>
+</head>
+<body>
+
+<section class="rope-section" aria-roledescription="carousel" aria-label="Spidey Testimonials">
+  <div class="stage" id="stage" tabindex="0" aria-label="Spidey Testimonials clothesline. Drag horizontally or use arrow keys.">
+    <div class="bridge-backdrop" id="backdrop"></div>
+    <div class="bridge-fog" aria-hidden="true"></div>
+    <canvas id="gl"></canvas>
+    <div class="stage-heading">
+      <h2>
+        <span class="heading-line line-1">It was all over <span class="crimson">papers,</span></span>
+        <span class="heading-line line-2"><span><span class="crimson">Pulling</span></span><span>in</span><span>few</span><span>thread.</span></span>
+      </h2>
+    </div>
+    <div class="dots" id="dots" role="tablist" aria-label="Choose testimonial"></div>
+    <div class="play-controls-overlay">
+      <button type="button" class="play-btn" id="playBtn" aria-pressed="false" aria-label="Play testimony">
+        <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+      </button>
+      <span class="play-label" id="playLabel">Play Testimony</span>
+    </div>
+    <div class="image-credit" id="imageCredit">Image Courtesy: Joseph Barrientos</div>
+    <div class="fallback" id="fallback">This section needs WebGL. The testimonials are listed below.</div>
+    <ul class="sr" id="srList"></ul>
+  </div>
+  <p class="sr" aria-live="polite" id="status"></p>
+</section>
+
+<script src="vendor/three.bundle.js"></script>
+<script src="vendor/GLTFLoader.bundle.js"></script>
+<!-- assets/puller.glb.js is deliberately NOT loaded here: it is a 2.2MB base64 fallback
+     character, fetched on demand by loadPullerFallback() only if spiderman.glb fails. -->
+<script>
+(() => {
+"use strict";
+
+/* =====================================================================
+   TUNABLES
+   ===================================================================== */
+const CFG = {
+  rope:{
+    points:56,
+    slack:1.008,
+    gravity:180,
+    damp:0.978,
+    iterations:4,
+    /* a free hanging chain over a span this long sags hundreds of px and never settles the
+       same way twice, so the macro shape is a designed baseline the points are sprung to;
+       wind, card weight and Jerry's yanks are the deviation */
+    stiff:140,
+    sag:0.018,
+    windX:500,
+    windY:250,
+    tugAmp:22,
+    radius:4.5,          // Web thread radius (3x — the hairline read as a scratch, not a web)
+    strands:2,           // Fine dual web filaments
+    strandR:2.4,         // Thread tube radius (3x)
+    lay:120,             // lay pitch scaled with the radius, or the twist reads as a spring
+    sampleEvery:4,       // centreline sampling, px
+  },
+  card:{
+    weight:1250,
+    ringInset:14,
+    segX:24, segY:14,          // cloth resolution
+    swingK:30, swingDamp:4.2, swingInertia:0.0009, maxSwing:0.10,
+    /* wind field on the cloth */
+    waveAmp:0.21,              // of card height, at full wind
+    waveLenU:13.5,             // ripples across the width (~2 cycles)
+    waveLenV:2.6,
+    waveSpeed:4.0,
+    rake:95,                   // how far the hem hangs back from the line, in px
+    curl:0.5,                  // how much the free bottom corners furl
+  },
+  human:{
+    leanK:350, leanC:28,        // fast posture spring: body responds immediately
+    gripK:0.008,               // instant fist clamping on load
+    driftPerTension:34,         // px/s the planted feet are dragged toward the rope
+    maxDrift:26,                // before she has to re-brace
+    stepDur:0.22, stepLift:16,
+    ropeBend:2200,              // how hard a loaded fist bends the line
+  },
+  motion:{
+    /* High stiffness + critically tuned damping for ultra-snappy card transitions */
+    springK:320, springDamp:32.0,
+    flickThreshold:180,
+    dragThreshold:0.08,
+    cyclesPerCard:1.5,
+  },
+};
+
+/* =====================================================================
+   LAWS OF PHYSICS TESTIMONIAL CONTENT
+   ===================================================================== */
+const DATA = [
+  { quote: "He's a menace! A wall-crawling web-slinger who takes the law into his own hands! But... off the record? New York wouldn't last a week without him.",
+    name: "J. Jonah Jameson", role: "Publisher & Editor-in-Chief, The Daily Bugle", tint: "#C22A1E", stars: 5 },
+  { quote: "Face it, Tiger... you just hit the jackpot. No matter how heavy the load gets, Peter never gives up on the people he loves.",
+    name: "Mary Jane Watson", role: "Executive Director, Watson Talent Agency", tint: "#C2603C", stars: 5 },
+  { quote: "With great power comes great responsibility. Peter carries that weight every single day, holding the city together one web at a time.",
+    name: "Uncle Ben Parker", role: "In Memoriam / Guiding Spirit", tint: "#3F6B8A", stars: 5 },
+  { quote: "Pete showed me what it really means to be Spider-Man. It's not about the mask or the powers — it's about getting back up every single time.",
+    name: "Miles Morales", role: "Spider-Man of Brooklyn, ESU Physics", tint: "#7C8C6A", stars: 5 },
+  { quote: "His webbing obeys extraordinary stress-strain elasticity. But his true strength is his heart — he catches everyone who falls.",
+    name: "Gwen Stacy", role: "Bio-Physics Fellow, Oscorp Laboratories", tint: "#6B5C8A", stars: 5 }
+];
+
+/* =====================================================================
+   SETUP
+   ===================================================================== */
+const stage    = document.getElementById("stage");
+const glCanvas = document.getElementById("gl");
+const dotsWrap = document.getElementById("dots");
+const statusEl = document.getElementById("status");
+const hintEl   = document.getElementById("hint");
+const srList   = document.getElementById("srList");
+
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp  = (a,b,t) => a+(b-a)*t;
+const easeIO = t => t<.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+
+let renderer = null;
+try {
+  renderer = new THREE.WebGLRenderer({
+    canvas: glCanvas,
+    alpha: true,
+    antialias: true,
+    powerPreference: "high-performance",
+    precision: "highp"
+  });
+}
+catch(e){ document.body.classList.add("no-webgl"); }
+
+if(renderer){
+renderer.setClearAlpha(0);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.32;
+if("outputColorSpace" in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 1, 10, 8000);
+
+/* Scene units are stage pixels: pixel (px,py) -> (px - W/2, -(py - H/2), z), with the camera
+   pushed back so the z = 0 plane is exactly 1:1 with CSS px. */
+const vx = px => px - W/2;
+const vy = py => -(py - H/2);
+
+/* ---------- Lighting: studio poster lighting matching reference render ---------- */
+const hemi = new THREE.HemisphereLight(0xfff6ec, 0x7a8694, 1.25);
+const key  = new THREE.DirectionalLight(0xfff6ea, 3.6);
+key.position.set(380, 520, 560);
+const fill = new THREE.DirectionalLight(0xd0e2f8, 1.6);
+fill.position.set(-420, 240, 450);
+const rim  = new THREE.DirectionalLight(0xfff2dc, 2.6);
+rim.position.set(240, 400, -320);
+const rim2 = new THREE.DirectionalLight(0xb4d0f4, 1.4);
+rim2.position.set(-300, 320, -240);
+const bounce = new THREE.DirectionalLight(0xffe2c4, 0.60);
+bounce.position.set(0, -200, 180);
+
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0001;
+key.shadow.normalBias = 0.2;
+key.shadow.radius = 4;
+scene.add(hemi, key, fill, rim, rim2, bounce);
+
+/* A tiny procedural sky, PMREM-filtered into a real image-based environment. This is what
+   gives the suit graded falloff across its curvature and believable specular breakup,
+   instead of the flat highlight a few directional lights produce on their own. */
+(function buildEnvironment(){
+  try {
+    const c = document.createElement("canvas");
+    c.width = 32; c.height = 128;
+    const g = c.getContext("2d");
+    const grad = g.createLinearGradient(0, 0, 0, 128);
+    grad.addColorStop(0.00, "#5b8cbf");     // deeper blue zenith
+    grad.addColorStop(0.28, "#8fb8de");     // mid-sky
+    grad.addColorStop(0.46, "#d4c8a8");     // warm golden horizon haze
+    grad.addColorStop(0.52, "#f0dcc0");     // sunset band
+    grad.addColorStop(0.62, "#c8a882");     // warm ground haze
+    grad.addColorStop(0.78, "#7a7068");     // dark ground
+    grad.addColorStop(1.00, "#4a4240");     // deep ground
+    g.fillStyle = grad; g.fillRect(0, 0, 32, 128);
+    const tex = new THREE.CanvasTexture(c);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    if("colorSpace" in tex) tex.colorSpace = THREE.SRGBColorSpace;
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    scene.environment = pmrem.fromEquirectangular(tex).texture;
+    tex.dispose();
+    pmrem.dispose();
+  } catch(err){
+    console.warn("environment map unavailable, falling back to analytic lights only", err);
+  }
+})();
+
+/* a wall a little behind everything, so cards and character throw real shadows */
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(1,1), new THREE.ShadowMaterial({ opacity:0.11 }));
+wall.receiveShadow = true;
+/* a floor catcher too, so his feet get a contact shadow and he reads as standing */
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1,1), new THREE.ShadowMaterial({ opacity:0.17 }));
+floor.rotation.x = -Math.PI/2;
+floor.receiveShadow = true;
+scene.add(wall, floor);
+
+/* ---------- materials ---------- */
+const MAT = {
+  rope  : null,
+  thread: new THREE.MeshStandardMaterial({ color:0xEEF8FE, roughness:0.2 }),
+  ring  : new THREE.MeshStandardMaterial({ color:0xD8ECF8, roughness:0.15, metalness:0.2 }),
+  fur   : new THREE.MeshPhysicalMaterial({ color:0xA9764A, roughness:0.72, sheen:0.65, sheenColor:0xE7C79A, sheenRoughness:0.65, clearcoat:0.08 }),
+  furDk : new THREE.MeshPhysicalMaterial({ color:0x8A5C38, roughness:0.78, sheen:0.5, sheenColor:0xD8B88C }),
+  belly : new THREE.MeshPhysicalMaterial({ color:0xF4E3C4, roughness:0.8, sheen:0.7, sheenColor:0xFFF6E4 }),
+  ear   : new THREE.MeshPhysicalMaterial({ color:0xE2A79C, roughness:0.62, clearcoat:0.2 }),
+  nose  : new THREE.MeshPhysicalMaterial({ color:0xD98C86, roughness:0.3, clearcoat:0.7 }),
+  hand  : new THREE.MeshPhysicalMaterial({ color:0xF6E8CE, roughness:0.62 }),
+  eye   : new THREE.MeshPhysicalMaterial({ color:0xFFFFFF, roughness:0.14, clearcoat:1 }),
+  pupil : new THREE.MeshPhysicalMaterial({ color:0x241A14, roughness:0.16, clearcoat:1 }),
+  dark  : new THREE.MeshStandardMaterial({ color:0x5E3E28, roughness:0.6 }),
+  mouth : new THREE.MeshStandardMaterial({ color:0x5E3226, roughness:0.5 }),
+  drop  : new THREE.MeshPhysicalMaterial({ color:0xAEDCF0, roughness:0.04, clearcoat:1, clearcoatRoughness:0,
+                                           transparent:true, opacity:0.88, emissive:0x2C6E8C, emissiveIntensity:0.25 }),
+};
+
+const GEO = {
+  ball : new THREE.SphereGeometry(1, 20, 14),
+  ring : new THREE.TorusGeometry(6.4, 1.5, 8, 18),
+};
+
+/* y is screen-down everywhere in this file, so it is negated on the way into three */
+function ball(mat, rx, ry, rz, x, y, z){
+  const m = new THREE.Mesh(GEO.ball, mat);
+  m.scale.set(rx, ry, rz ?? rx);
+  m.position.set(x||0, -(y||0), z||0);
+  m.castShadow = true;
+  return m;
+}
+const at = (o,x,y,z) => { o.position.set(x, -y, z); return o; };
+
+/* a tapered limb segment from its group origin along +x, with joint balls at both ends so
+   the silhouette stays continuous however far the IK swings it */
+function segment(mat, L, r0, r1){
+  const g = new THREE.Group();
+  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, L, 14, 1, true), mat);
+  cyl.rotation.z = -Math.PI/2;
+  cyl.position.x = L/2;
+  cyl.castShadow = true;
+  g.add(cyl, ball(mat, r0,r0,r0, 0,0,0), ball(mat, r1,r1,r1, L,0,0));
+  return g;
+}
+
+/* ---------- a tube whose centreline is rewritten every frame ---------- */
+function makeTube(nSeg, nRing, mat){
+  const geo = new THREE.BufferGeometry();
+  const count = nSeg*nRing;
+  const pos = new Float32Array(count*3), nor = new Float32Array(count*3), uv = new Float32Array(count*2);
+  const idx = [];
+  for(let s=0;s<nSeg-1;s++) for(let r=0;r<nRing;r++){
+    const r2=(r+1)%nRing;
+    const a=s*nRing+r, b=s*nRing+r2, c=(s+1)*nRing+r2, d=(s+1)*nRing+r;
+    idx.push(a,b,d, b,c,d);
+  }
+  for(let s=0;s<nSeg;s++) for(let r=0;r<nRing;r++){
+    const i=(s*nRing+r)*2; uv[i]=s/(nSeg-1)*120; uv[i+1]=r/nRing;
+  }
+  geo.setAttribute("position", new THREE.BufferAttribute(pos,3));
+  geo.setAttribute("normal",   new THREE.BufferAttribute(nor,3));
+  geo.setAttribute("uv",       new THREE.BufferAttribute(uv,2));
+  geo.setIndex(idx);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.castShadow = true;
+  return { mesh, geo, nSeg, nRing,
+           ringCos:Array.from({length:nRing},(_,r)=>Math.cos(r/nRing*Math.PI*2)),
+           ringSin:Array.from({length:nRing},(_,r)=>Math.sin(r/nRing*Math.PI*2)) };
+}
+const _t=new THREE.Vector3(), _n=new THREE.Vector3(), _b=new THREE.Vector3(), _up=new THREE.Vector3(0,0,1);
+function updateTube(tube, pts, radius, taper){
+  const pos = tube.geo.attributes.position.array, nor = tube.geo.attributes.normal.array;
+  const {nSeg,nRing,ringCos,ringSin} = tube;
+  for(let s=0;s<nSeg;s++){
+    const p=pts[s], pPrev=pts[Math.max(0,s-1)], pNext=pts[Math.min(nSeg-1,s+1)];
+    _t.set(pNext.x-pPrev.x, pNext.y-pPrev.y, (pNext.z||0)-(pPrev.z||0));
+    if(_t.lengthSq()<1e-9) _t.set(1,0,0);
+    _t.normalize();
+    _n.crossVectors(_t,_up); if(_n.lengthSq()<1e-9) _n.set(0,1,0); _n.normalize();
+    _b.crossVectors(_t,_n).normalize();
+    const r = radius * (taper ? taper(s/(nSeg-1)) : 1);
+    for(let k=0;k<nRing;k++){
+      const c=ringCos[k], sn=ringSin[k];
+      const nx=_n.x*c+_b.x*sn, ny=_n.y*c+_b.y*sn, nz=_n.z*c+_b.z*sn;
+      const i=(s*nRing+k)*3;
+      pos[i]=p.x+nx*r; pos[i+1]=p.y+ny*r; pos[i+2]=(p.z||0)+nz*r;
+      nor[i]=nx; nor[i+1]=ny; nor[i+2]=nz;
+    }
+  }
+  tube.geo.attributes.position.needsUpdate = true;
+  tube.geo.attributes.normal.needsUpdate = true;
+}
+
+/* ---------- rope: three strands helically wound around a core ----------
+   The braid is real geometry (each strand is its own swept tube), so the lay of the rope
+   reads at any zoom; the texture only supplies micro-fibre. */
+function fibreTexture(){
+  const c=document.createElement("canvas"); c.width=128; c.height=128;
+  const x=c.getContext("2d");
+  x.fillStyle="#C79A63"; x.fillRect(0,0,128,128);
+  for(let i=0;i<1400;i++){                       // fibres running along the strand
+    const y=Math.random()*128, len=6+Math.random()*26, xx=Math.random()*128;
+    const t=Math.random();
+    x.strokeStyle = t<0.5 ? `rgba(${120+t*60|0},${86+t*40|0},48,.35)` : `rgba(255,${226+t*20|0},178,.32)`;
+    x.lineWidth = 0.6+Math.random()*1.2;
+    x.beginPath(); x.moveTo(xx,y); x.lineTo(xx+len*0.25, y+len); x.stroke();
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.colorSpace=THREE.SRGBColorSpace;
+  t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+/* no `transmission` here on purpose: it makes three.js render the whole scene a second time
+   into a refraction target every frame, and with a 600k-triangle character on stage that
+   halved the frame rate for an effect invisible on a 1.5px-radius thread. Sheen + opacity
+   give the same milky web look for free. */
+MAT.rope = new THREE.MeshPhysicalMaterial({
+  color: 0xF8FCFF,
+  roughness: 0.15,
+  metalness: 0.1,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.1,
+  sheen: 0.9,
+  sheenColor: 0xE2F4FF,
+  transparent: true,
+  opacity: 0.95
+});
+MAT.ropeCore = new THREE.MeshPhysicalMaterial({
+  color: 0xD3ECF8,
+  roughness: 0.2,
+  metalness: 0.05
+});
+
+/* ---------- 3D Studio Microphone Mesh & Materials ---------- */
+MAT.micChrome = new THREE.MeshStandardMaterial({ color: 0xF0F0F0, roughness: 0.08, metalness: 0.95 });
+MAT.micHandle = new THREE.MeshStandardMaterial({ color: 0x1A1A1A, roughness: 0.35, metalness: 0.25 });
+MAT.micBand   = new THREE.MeshStandardMaterial({ color: 0xC22A1E, roughness: 0.2, metalness: 0.5 });
+
+function makeMicMesh(){
+  const g = new THREE.Group();
+
+  /* Metallic Chrome Grille Head */
+  const head = new THREE.Mesh(new THREE.SphereGeometry(14, 24, 18), MAT.micChrome);
+  head.position.y = 22;
+
+  /* Inner mesh layer */
+  const meshLayer = new THREE.Mesh(new THREE.SphereGeometry(13.2, 16, 12), MAT.micHandle);
+  meshLayer.position.y = 22;
+
+  /* Red Accent Ring */
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(10.5, 10.5, 3.5, 24), MAT.micBand);
+  band.position.y = 6;
+
+  /* Handle Body */
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(9.5, 6.2, 48, 24), MAT.micHandle);
+  handle.position.y = -20;
+
+  /* Bottom Plug */
+  const plug = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 5.0, 10, 20), MAT.micChrome);
+  plug.position.y = -48;
+
+  g.add(head, meshLayer, band, handle, plug);
+  for(const m of g.children) m.castShadow = true;
+  return g;
+}
+
+/* micMesh is the transform the physics drives; its single child is the *model*, which can be
+   swapped from the procedural build to assets/Mic.glb once that lands. Keeping the driven
+   transform separate from the model means stepMic never has to care which one is in there,
+   and the model can carry its own recentring/orientation offsets. */
+const micMesh = new THREE.Group();
+micMesh.visible = false;
+scene.add(micMesh);
+
+const MIC = { model: null, naturalH: 110, fromGLB: false };
+window.MIC = MIC;
+
+/* the mic is authored in stage pixels at desktop proportions: ~110px tall against a ~520px
+   stature. Hold that ratio so the narrow layout (stature 0.54H) doesn't get an oversized mic. */
+const MIC_STATURE_RATIO = 0.105;
+
+/* Depth the mic travels and is held at. It used to sit at z 60 — torso depth, with the body
+   centre around 48 — while both hands are pushed out to z >= 105 to clear the chest, so the
+   fist rendered *in front of* the mic it was supposedly holding and all you saw was a sliver of
+   grille. 118 puts the mic just proud of the palm; poseHuman parks the hand slightly behind it. */
+const MIC_HOLD_Z = 118;
+
+/* deliberately does NOT call sizeMic(): this runs at module scope, above the HUMAN (:975) and
+   H (:1443) declarations, and touching either from here is a temporal-dead-zone throw. Every
+   caller that can size is past boot — triggerMicSequence, layout, initMic. */
+function setMicModel(obj, naturalH){
+  if(MIC.model) micMesh.remove(MIC.model);
+  MIC.model = obj;
+  MIC.naturalH = naturalH || 110;
+  micMesh.add(obj);
+}
+function sizeMic(){
+  if(!MIC.naturalH) return;
+  const stature = (HUMAN.scale * 1.66) || (H * 0.65);
+  if(!stature) return;
+  micMesh.scale.setScalar(stature * MIC_STATURE_RATIO / MIC.naturalH);
+}
+setMicModel(makeMicMesh(), 110);
+
+/* assets/Mic.glb arrives long after first paint (5.4MB, behind a 102MB character). Normalise
+   it the way initHuman normalises the rig: shadows on, pivot at the centroid — the physics
+   spins the group during DROP/SLIDE, so an off-centre pivot would make the mic orbit its own
+   offset — and the grille head pointing +Y to match the procedural build. */
+function initMic(gltf){
+  const root = gltf.scene;
+  root.traverse(o => {
+    if(o.isMesh || o.isSkinnedMesh){ o.castShadow = true; o.receiveShadow = true; }
+  });
+
+  /* orient before measuring: whichever axis is longest is the mic's length */
+  const pre = new THREE.Box3().setFromObject(root);
+  const preSize = pre.getSize(new THREE.Vector3());
+  if(preSize.z > preSize.y && preSize.z > preSize.x) root.rotation.x = -Math.PI/2;
+  else if(preSize.x > preSize.y) root.rotation.z = Math.PI/2;
+  root.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const ctr  = box.getCenter(new THREE.Vector3());
+
+  /* wrap so the recentring offset survives the rotation we just applied */
+  const holder = new THREE.Group();
+  root.position.sub(ctr);
+  /* Then sink the mic DOWN into the fist. Centred on the grip, ~70% of the mic pokes up above the
+     hand and it reads as a cup on a stem. Dropping it by ~0.37 of its length seats the body in the
+     hand so only the grille (top ~1/3) shows — two thirds held, like a real mic. The grip axis is
+     +Y after the orientation above. */
+  root.position.y -= (size.y || 0) * 0.37;
+  holder.add(root);
+
+  setMicModel(holder, size.y || 110);
+  MIC.fromGLB = true;
+  sizeMic();
+}
+
+const MIC_STATE = {
+  active: false,
+  phase: "IDLE", // IDLE, FLY_IN, CATCH, HELD, DROP, SLIDE
+  t: 0,
+  entered: false,      // set once the current phase has run its entry code
+  dropRequested: false,// speech ended mid-flight; drop as soon as the catch reads
+  pos: { x: 0, y: 0, z: MIC_HOLD_Z },
+  vel: { x: 0, y: 0, z: 0 },
+  rotZ: 0,
+  rotSpeed: 0,
+  /* -1 = not released yet. Once the mic leaves his hand this counts up and drives the *arm*,
+     independently of the mic: the hand holds the extended open-palm pose while the mic falls
+     and lands, then eases back to the line. It keeps running after the mic has left the stage
+     so the arm return never snaps when the sequence deactivates. */
+  releaseT: -1,
+  releasePose: null,
+  trailAt: 0
+};
+/* No hold constants any more: the arm no longer freezes in a pose after letting go. It opens
+   and comes straight back down onto the rope, timed by DROP_RETURN where the choreography
+   lives, so the whole sequence reads from one place. */
+const _micV0 = new THREE.Vector3(), _micV1 = new THREE.Vector3(), _tmpV = new THREE.Vector3();
+
+/* ---------- Body-frame gesture targeting ----------
+   He stands at ~49 degrees to camera, so his own "forward" and "left" are mostly Z, not X.
+   A target written as a stage fraction — humanGroundY - stature*0.88 and the like — has no
+   component along the axes a gesture actually travels down, which is why such poses always
+   stalled halfway: the hand went as far as screen space could carry it and stopped. Every arm
+   target below is instead built from the rig's own axes, so it tracks his facing, lean,
+   breathing and hip drop for free, because the bones it is derived from already do. */
+const _bax = { L:new THREE.Vector3(), U:new THREE.Vector3(), F:new THREE.Vector3(), t:new THREE.Vector3() };
+function bodyAxes(){
+  const B = HUMAN.B;
+  if(!B || !B.LeftShoulder || !B.RightShoulder || !B.Spine2 || !B.Spine3) return false;
+  _bax.L.setFromMatrixPosition(B.LeftShoulder.matrixWorld)
+        .sub(_bax.t.setFromMatrixPosition(B.RightShoulder.matrixWorld));
+  if(_bax.L.lengthSq() < 1e-8) return false;
+  _bax.L.normalize();                                                   // across, toward HIS left
+  _bax.U.setFromMatrixPosition(B.Spine3.matrixWorld)
+        .sub(_bax.t.setFromMatrixPosition(B.Spine2.matrixWorld));
+  if(_bax.U.lengthSq() < 1e-8) return false;
+  _bax.U.normalize();                                                   // up the spine
+  _bax.F.crossVectors(_bax.L, _bax.U).normalize();                      // the way he faces
+  return true;
+}
+/* World point: anchor bone, displaced along his left / up / forward, measured in arm-lengths
+   so a pose keeps its proportions at any stature or viewport. */
+function bodyPoint(anchorName, left, up, fwd, out){
+  const b = HUMAN.B && HUMAN.B[anchorName];
+  if(!b || !bodyAxes()) return null;
+  const L = HUMAN.armLen || 180;
+  return out.setFromMatrixPosition(b.matrixWorld)
+            .addScaledVector(_bax.L, left * L)
+            .addScaledVector(_bax.U, up   * L)
+            .addScaledVector(_bax.F, fwd  * L);
+}
+/* Same, expressed in the mixed convention MIC_STATE.pos uses: x/y in stage pixels, z in scene. */
+function bodyPointStage(anchorName, left, up, fwd, fallback){
+  const p = bodyPoint(anchorName, left, up, fwd, _micV1);
+  if(!p) return fallback;
+  return { x: p.x + W/2, y: H/2 - p.y, z: p.z };
+}
+/* wrist orientation for the drop: fingers splayed down-and-out instead of curled along the
+   web line. Rotating the palm costs no reach, which matters because the arm's 94% extension
+   clamp leaves very little room to sell the pose by translation alone. */
+/* rope-grip and mic-grip wrist orientations, slerped by micW so the wrist rolls over smoothly
+   as the hand comes off the line instead of snapping between two grip styles */
+const _qRope = new THREE.Quaternion(), _qMic = new THREE.Quaternion();
+window.MIC_STATE = MIC_STATE;
+
+/* Every transition goes through here so `entered` can gate per-phase entry code. The drop used
+   to detect its own first frame with `t === dt`, which only held because tick runs at a fixed
+   1/60 — any variable-dt path silently skipped the velocity seed and dropped the mic from rest. */
+function setMicPhase(p){
+  MIC_STATE.phase = p;
+  MIC_STATE.t = 0;
+  MIC_STATE.entered = false;
+  if(p === "DROP"){
+    MIC_STATE.releaseT = 0;
+    MIC_STATE.vel = { x: 8, y: 15, z: 0 };
+    MIC_STATE.rotSpeed = -2.4;
+    /* Snapshot exact right hand bone position at release */
+    const handR = HUMAN.B.RightHand;
+    if(handR){
+      const hp = bonePos(handR, _tmpV);
+      MIC_STATE.releasePose = {
+        x: hp.x + W/2,
+        y: H/2 - hp.y,
+        z: MIC_HOLD_Z
+      };
+    } else {
+      MIC_STATE.releasePose = { x: MIC_STATE.pos.x, y: MIC_STATE.pos.y, z: MIC_HOLD_Z };
+    }
+  }
+}
+
+function triggerMicSequence(){
+  MIC_STATE.active = true;
+  MIC_STATE.dropRequested = false;
+  setMicPhase("FLY_IN");
+  const stature = (HUMAN.scale * 1.66) || (H * 0.65);
+  MIC_STATE.pos = { x: W + 160, y: humanGroundY - stature * 0.70, z: MIC_HOLD_Z };
+  MIC_STATE.vel = { x: 0, y: 0, z: 0 };
+  MIC_STATE.rotZ = -0.6;
+  MIC_STATE.rotSpeed = 6.0;
+  MIC_STATE.releaseT = -1;
+  MIC_STATE.releasePose = null;
+  MIC_STATE.trailAt = 0;
+  sizeMic();
+  micMesh.visible = true;
+}
+window.triggerMicSequence = triggerMicSequence;
+
+/* Ask for the drop. Mid-flight this only arms `dropRequested`: letting the catch finish reads
+   far better than releasing a mic that is still somewhere off the right edge. */
+function requestMicDrop(){
+  if(!MIC_STATE.active) return;
+  if(MIC_STATE.phase === "DROP" || MIC_STATE.phase === "SLIDE") return;
+  if(MIC_STATE.phase === "HELD") setMicPhase("DROP");
+  else MIC_STATE.dropRequested = true;
+}
+
+function stepMic(dt){
+  /* runs even once the mic is gone, so the arm's return from the drop pose can finish */
+  if(MIC_STATE.releaseT >= 0 && MIC_STATE.releaseT < 4) MIC_STATE.releaseT += dt;
+  if(!MIC_STATE.active) return;
+  MIC_STATE.t += dt;
+  const stature = (HUMAN.scale * 1.66) || (H * 0.65);
+  const reach = HUMAN.reach || 100;
+
+  /* Catch: out in front of his own right shoulder, arm visibly extended to meet the mic.
+     Mask: anchored to the HEAD, parked in front of and below it so the grille — half a mic
+     length above the point the hand holds — rises to the mask rather than the sternum. That
+     coupling is why the old stage-fraction version appeared to work: at stature*0.88 the hand
+     sat on his chest and only the mic's body made it look right. */
+  const catchTarget = bodyPointStage("RightArm",  -0.25,  0.02,  0.60,
+                        { x: humanX + reach*0.72, y: humanGroundY - stature*0.66, z: MIC_HOLD_Z });
+  /* Hold the mic UP at the mask, not at the sternum. Anchored to the Neck and lifted so the hand
+     sits just below the head; the grille (half a mic above the grip) then reaches the mouth. The
+     mic is only 50% scale now, so the grille clears the fist by less — the hand has to come this
+     high for the mic to read as being spoken into. */
+  const mouthTarget = bodyPointStage("Neck", -0.02, 0.10, 0.42,
+                        { x: humanX + reach*0.28, y: humanGroundY - stature*0.82, z: MIC_HOLD_Z });
+  const floorY = humanGroundY - 8;
+
+  if(MIC_STATE.phase === "FLY_IN"){
+    const k = clamp(MIC_STATE.t / 0.65, 0, 1);
+    const m = easeIO(k);
+    MIC_STATE.pos.x = lerp(W + 160, catchTarget.x, m);
+    MIC_STATE.pos.y = lerp(humanGroundY - stature * 0.70, catchTarget.y, m) - Math.sin(Math.PI * m) * 45;
+    MIC_STATE.pos.z = MIC_HOLD_Z;
+    MIC_STATE.rotZ = lerp(-0.6, 0.2, m);
+    /* motion trail: a wave arc shed every ~70ms along the flight path */
+    MIC_STATE.trailAt -= dt;
+    if(MIC_STATE.trailAt <= 0 && k < 0.92){
+      MIC_STATE.trailAt = 0.07;
+      spawnRingsAt(MIC_STATE.pos.x, MIC_STATE.pos.y, MIC_STATE.pos.z - 10, 0.35, 0.55, 1, 2.6);
+    }
+    if(k >= 1.0) setMicPhase("CATCH");
+  } else if(MIC_STATE.phase === "CATCH"){
+    /* the moment of impact: the mic dead-stops in the fist and recoils a little back along the
+       direction it came from, settling out over the phase. Without this the fly-in slid
+       straight into the lift-to-mouth and the catch never read as a catch. */
+    const k = clamp(MIC_STATE.t / 0.18, 0, 1);
+    const settle = Math.sin(Math.PI * k) * (1 - k);
+    MIC_STATE.pos.x = catchTarget.x + settle * 8;
+    MIC_STATE.pos.y = catchTarget.y - settle * 3;
+    MIC_STATE.pos.z = MIC_HOLD_Z;
+    MIC_STATE.rotZ = 0.2 + settle * 0.10;
+    if(k >= 1.0) setMicPhase(MIC_STATE.dropRequested ? "DROP" : "HELD");
+  } else if(MIC_STATE.phase === "HELD"){
+    if(MIC_STATE.dropRequested){ setMicPhase("DROP"); }
+    else {
+      /* The MIC is authoritative here and the hand follows it (poseHuman aims the palm at
+         MIC_STATE.pos). Do not also drive the mic from the hand bone: poseHuman runs earlier
+         in the same tick, so the two chase each other and the pair drifts by the offset every
+         frame — about 600px/s off the top-right of the stage during a hold. */
+      const k = clamp(MIC_STATE.t / 0.40, 0, 1);
+      const m = easeIO(k);
+      /* Idle life: once the mic settles at the mouth it must not freeze — a dead-still arm reads
+         as a stiff wrist while the rest of him breathes. Layer a slow breathing bob, a small
+         lateral drift and a gentle wrist roll (+ a faster micro-tremor). The hand IK follows the
+         mic and the wrist basis is built from rotZ, so animating the mic animates the wrist for
+         free. Amplitudes are a couple of px / a few degrees — alive, not fidgety. Ramped in by m
+         so it doesn't fight the settle. */
+      const tt = MIC_STATE.t;
+      const bob   = Math.sin(tt * 1.9)        * 2.4;
+      const swayX = Math.sin(tt * 1.3 + 0.7)  * 1.7;
+      const wrist = Math.sin(tt * 1.1 + 0.4)  * 0.055
+                  + Math.sin(tt * 2.7)        * 0.022;
+      MIC_STATE.pos.x = lerp(catchTarget.x, mouthTarget.x, m) + swayX * m;
+      MIC_STATE.pos.y = lerp(catchTarget.y, mouthTarget.y, m) + bob   * m;
+      MIC_STATE.pos.z = MIC_HOLD_Z;
+      MIC_STATE.rotZ = lerp(0.2, 0.42, m) + wrist * m;
+    }
+  }
+
+  if(MIC_STATE.phase === "DROP"){
+    /* Free-fall under gravity g = 1800 px/s^2 */
+    if(!MIC_STATE.entered){
+      MIC_STATE.vel = { x: 12, y: 20, z: 0 };
+      MIC_STATE.rotSpeed = -2.4;
+      MIC_STATE.entered = true;
+      if(!MIC_STATE.releasePose){
+        MIC_STATE.releasePose = { x: MIC_STATE.pos.x, y: MIC_STATE.pos.y, z: MIC_HOLD_Z };
+      }
+    }
+    MIC_STATE.vel.y += 1800 * dt;
+    MIC_STATE.pos.x += MIC_STATE.vel.x * dt;
+    MIC_STATE.pos.y += MIC_STATE.vel.y * dt;
+    MIC_STATE.rotZ += MIC_STATE.rotSpeed * dt;
+
+    if(MIC_STATE.pos.y >= floorY){
+      const bounce = -MIC_STATE.vel.y * 0.24;
+      MIC_STATE.pos.y = floorY;
+      /* impact ripple, scaled by how hard it landed */
+      const hit = clamp(MIC_STATE.vel.y / 1300, 0.35, 1);
+      spawnRingsAt(MIC_STATE.pos.x, floorY, MIC_STATE.pos.z - 6, hit, 1.9, 4, 1.5);
+      setMicPhase("SLIDE");
+      MIC_STATE.vel.y = bounce;
+      MIC_STATE.vel.x = -850;
+    }
+  } else if(MIC_STATE.phase === "SLIDE"){
+    MIC_STATE.vel.y += 1800 * dt;
+    MIC_STATE.pos.x += MIC_STATE.vel.x * dt;
+    MIC_STATE.pos.y += MIC_STATE.vel.y * dt;
+    if(MIC_STATE.pos.y >= floorY){
+      MIC_STATE.pos.y = floorY;
+      MIC_STATE.vel.y = 0;
+    }
+    MIC_STATE.rotZ += -12.0 * dt;
+    if(MIC_STATE.pos.x < -180){
+      MIC_STATE.active = false;
+      MIC_STATE.dropRequested = false;
+      setMicPhase("IDLE");
+      micMesh.visible = false;
+    }
+  }
+
+  micMesh.position.set(vx(MIC_STATE.pos.x), vy(MIC_STATE.pos.y), MIC_STATE.pos.z);
+  micMesh.rotation.set(0, 0, MIC_STATE.rotZ);
+}
+
+/* one rope = N strand tubes + a dark core so the gaps between strands do not see through */
+function makeRope(nSeg){
+  const strands=[];
+  for(let k=0;k<CFG.rope.strands;k++) strands.push(makeTube(nSeg, 7, MAT.rope));
+  const core = makeTube(nSeg, 8, MAT.ropeCore);
+  for(const t of strands) scene.add(t.mesh);
+  scene.add(core.mesh);
+  return { strands, core, nSeg, buf:Array.from({length:nSeg},()=>({x:0,y:0,z:0})) };
+}
+const _fN=new THREE.Vector3(), _fB=new THREE.Vector3(), _fT=new THREE.Vector3(), _fUp=new THREE.Vector3(0,0,1);
+/* pts: centreline in scene space; arc: matching arc length per sample (for a constant lay) */
+function updateRope(rp, pts, arc, radius, strandR, travel){
+  const n=rp.nSeg, twist=Math.PI*2/CFG.rope.lay, tr=travel||0;
+  for(let k=0;k<rp.strands.length;k++){
+    const phase = k/rp.strands.length*Math.PI*2;
+    const buf = rp.buf;
+    for(let i=0;i<n;i++){
+      const p=pts[i], pPrev=pts[Math.max(0,i-1)], pNext=pts[Math.min(n-1,i+1)];
+      _fT.set(pNext.x-pPrev.x, pNext.y-pPrev.y, (pNext.z||0)-(pPrev.z||0));
+      if(_fT.lengthSq()<1e-9) _fT.set(1,0,0);
+      _fT.normalize();
+      _fN.crossVectors(_fT,_fUp); if(_fN.lengthSq()<1e-9) _fN.set(0,1,0); _fN.normalize();
+      _fB.crossVectors(_fT,_fN).normalize();
+      const a = phase + (arc[i]-tr)*twist, c=Math.cos(a), sn=Math.sin(a);
+      buf[i].x = p.x + (_fN.x*c + _fB.x*sn)*radius;
+      buf[i].y = p.y + (_fN.y*c + _fB.y*sn)*radius;
+      buf[i].z = (p.z||0) + (_fN.z*c + _fB.z*sn)*radius;
+    }
+    updateTube(rp.strands[k], buf, strandR);
+  }
+  updateTube(rp.core, pts, radius*0.82);
+}
+
+const LINE_SAMPLES = 360, FREE_SAMPLES = 150;
+const line    = makeRope(LINE_SAMPLES);
+const freeEnd = makeRope(FREE_SAMPLES);
+
+/* =====================================================================
+   CARD CLOTH
+   ===================================================================== */
+function paintCard(d, w, h, dpr){
+  const c=document.createElement("canvas");
+  c.width=Math.max(2,Math.round(w*dpr));
+  c.height=Math.max(2,Math.round(h*dpr));
+  const x=c.getContext("2d");
+  x.scale(dpr,dpr);
+
+  /* 3M Canary Yellow Post-It paper background */
+  const g=x.createLinearGradient(0,0,w*0.2,h);
+  g.addColorStop(0,"#FFF575");
+  g.addColorStop(0.55,"#FEE852");
+  g.addColorStop(1,"#FCD535");
+  x.fillStyle=g; x.fillRect(0,0,w,h);
+
+  x.globalAlpha=0.03;                                     // fine post-it paper texture
+  for(let i=0;i<Math.round(w*h/260);i++){
+    x.fillStyle = i%3 ? "#8A6E14" : "#ffffff";
+    x.fillRect(Math.random()*w, Math.random()*h, 1.5, 1);
+  }
+  x.globalAlpha=1;
+  x.strokeStyle="rgba(215, 175, 25, 0.40)"; x.lineWidth=1.5; x.strokeRect(.75,.75,w-1.5,h-1.5);
+
+  const pad  = Math.round(Math.min(w,h)*0.095);
+  const qSize= Math.round(h*0.088);
+  const colW = (w - pad*2) * 0.62;
+
+  /* Quote text in rich dark #101010 */
+  x.fillStyle="#101010";
+  if ('letterSpacing' in x) x.letterSpacing = "-0.05em";
+  x.font=`500 ${qSize}px 'Plus Jakarta Sans', sans-serif`;
+  x.textBaseline="alphabetic";
+
+  const wrap=(text,maxW)=>{
+    const words=text.split(" "); const lines=[]; let cur="";
+    for(const wd of words){
+      const test = cur ? cur+" "+wd : wd;
+      if(x.measureText(test).width>maxW && cur){ lines.push(cur); cur=wd; } else cur=test;
+    }
+    if(cur) lines.push(cur);
+    return lines;
+  };
+  const lines=wrap("“"+d.quote+"”", colW);
+  const lh=qSize*1.34;
+  let ty = (h - (lines.length-1)*lh) / 2 + qSize*0.24;
+  for(const ln of lines){ x.fillText(ln, pad, ty); ty+=lh; }
+
+  /* Bio block on the right column */
+  const bioX0 = pad + colW + Math.round(w*0.04);
+  const bioW  = w - pad - bioX0;
+
+  x.strokeStyle="rgba(180,160,130,.45)"; x.lineWidth=1;
+  x.beginPath(); x.moveTo(bioX0 - Math.round(w*0.02), h*0.16); x.lineTo(bioX0 - Math.round(w*0.02), h*0.84); x.stroke();
+
+  /* Avatar circle */
+  const avR = Math.max(16, Math.round(h*0.088));
+  const avX = bioX0 + avR;
+  const avY = h * 0.28;
+
+  x.fillStyle = d.tint || "#C22A1E";
+  x.beginPath(); x.arc(avX, avY, avR, 0, Math.PI*2); x.fill();
+  x.fillStyle = "#ffffff";
+  x.font = `700 ${Math.round(avR*0.84)}px 'Plus Jakarta Sans', sans-serif`;
+  x.textAlign = "center";
+  x.textBaseline = "middle";
+  x.fillText(d.name.split(" ").map(s=>s[0]).join("").slice(0,2), avX, avY);
+
+  /* Person Name & Role wrapped neatly inside bioW */
+  x.textAlign = "left";
+  x.textBaseline = "alphabetic";
+
+  const mSize = Math.max(11, Math.round(h*0.052));
+  let tyBio = avY + avR + Math.round(h*0.09);
+
+  /* Name */
+  x.fillStyle = "#101010";
+  x.font = `700 ${mSize}px 'Plus Jakarta Sans', sans-serif`;
+  const nameLines = wrap(d.name, bioW);
+  for(const nLn of nameLines){
+    x.fillText(nLn, bioX0, tyBio);
+    tyBio += mSize * 1.22;
+  }
+
+  /* Role */
+  tyBio += Math.round(h*0.015);
+  x.fillStyle = "#4A4238";
+  x.font = `500 ${Math.round(mSize*0.85)}px 'Plus Jakarta Sans', sans-serif`;
+  const roleLines = wrap(d.role, bioW);
+  for(const rLn of roleLines){
+    x.fillText(rLn, bioX0, tyBio);
+    tyBio += mSize * 1.16;
+  }
+
+  /* Stars */
+  tyBio += Math.round(h*0.02);
+  x.fillStyle = "#C22A1E";
+  x.font = `${Math.round(mSize*0.95)}px 'Plus Jakarta Sans', sans-serif`;
+  const stars = "★".repeat(d.stars) + "☆".repeat(5 - d.stars);
+  x.fillText(stars, bioX0, tyBio);
+
+  const t=new THREE.CanvasTexture(c);
+  t.colorSpace=THREE.SRGBColorSpace;
+  t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+/* a grid whose vertices are written in world space every frame */
+function makeCloth(segX, segY){
+  const geo=new THREE.BufferGeometry();
+  const nx=segX+1, ny=segY+1, count=nx*ny;
+  const pos=new Float32Array(count*3), uv=new Float32Array(count*2), idx=[];
+  for(let j=0;j<ny;j++) for(let i=0;i<nx;i++){
+    const k=(j*nx+i)*2; uv[k]=i/segX; uv[k+1]=1-j/segY;    // texture top row at j = 0
+  }
+  for(let j=0;j<segY;j++) for(let i=0;i<segX;i++){
+    const a=j*nx+i, b=j*nx+i+1, c=(j+1)*nx+i+1, d=(j+1)*nx+i;
+    idx.push(a,b,d, b,c,d);
+  }
+  geo.setAttribute("position", new THREE.BufferAttribute(pos,3));
+  geo.setAttribute("uv", new THREE.BufferAttribute(uv,2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return { geo, nx, ny, segX, segY };
+}
+
+const cards = DATA.map((d,i) => {
+  const cloth = makeCloth(CFG.card.segX, CFG.card.segY);
+  const mat = new THREE.MeshPhysicalMaterial({
+    roughness:0.78, sheen:0.8, sheenColor:0xFFF3E0, sheenRoughness:0.5,
+    side:THREE.DoubleSide, clearcoat:0.12,
+  });
+  const mesh = new THREE.Mesh(cloth.geo, mat);
+  mesh.castShadow = true;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+
+  const threadL = segment(MAT.thread, 10, 1.1, 1.1);
+  const threadR = segment(MAT.thread, 10, 1.1, 1.1);
+  const ringL = new THREE.Mesh(GEO.ring, MAT.ring);
+  const ringR = new THREE.Mesh(GEO.ring, MAT.ring);
+  ringL.castShadow = ringR.castShadow = true;
+  scene.add(threadL, threadR, ringL, ringR);
+
+  const li=document.createElement("li");
+  li.textContent = `${d.name}, ${d.role}: “${d.quote}”`;
+  srList.append(li);
+
+  return { d, cloth, mesh, mat, threadL, threadR, ringL, ringR,
+           theta:0, thetaV:0, pmx:0, pvx:0, phase:i*1.9, tex:null, visible:true };
+});
+
+const dots = DATA.map((d,i) => {
+  const b=document.createElement("button");
+  b.className="dot"; b.type="button";
+  b.setAttribute("role", "tab");
+  b.setAttribute("id", `tab-${i+1}`);
+  b.setAttribute("aria-selected", i===0 ? "true" : "false");
+  b.setAttribute("aria-label", `Slide ${i+1} of ${DATA.length}: ${d.name}`);
+  b.addEventListener("click", () => goTo(i));
+  dotsWrap.append(b);
+  return b;
+});
+
+if(typeof customElements !== "undefined" && !customElements.get("spidey-testimony")){
+  class SpideyTestimonyElement extends HTMLElement {
+    connectedCallback(){
+      this.setAttribute("role", "region");
+      this.setAttribute("aria-label", "Spider-Man Testimonials Carousel");
+    }
+  }
+  customElements.define("spidey-testimony", SpideyTestimonyElement);
+}
+
+/* =====================================================================
+   THE PULLER — rigged human, posed procedurally
+   =====================================================================
+   The GLB ships a skeleton only (its animations were stripped). Everything below is
+   authored: the body leans and crouches into the haul, the arms are solved with IK onto
+   two grip points that slide along the rope hand over hand, and the legs are solved onto
+   planted feet so the knees take the weight shift for free. */
+const HUMAN = {
+  ready:false, root:null, mesh:null, B:{}, rest:{},
+  scale:1, ground:0, faceY:0.85, armLen:0, legLen:0, shoulder:{x:0,y:0},
+};
+const IK = {
+  v0:new THREE.Vector3(), v1:new THREE.Vector3(), v2:new THREE.Vector3(), v3:new THREE.Vector3(),
+  q0:new THREE.Quaternion(), q1:new THREE.Quaternion(), q2:new THREE.Quaternion(),
+};
+function bonePos(b, out){ b.updateWorldMatrix(true,false); return out.setFromMatrixPosition(b.matrixWorld); }
+
+/* rotate a bone so its world rotation becomes q * current, expressed in parent space */
+function applyWorldDelta(bone, q){
+  const wq = bone.getWorldQuaternion(IK.q1);
+  const pq = bone.parent.getWorldQuaternion(IK.q2).invert();
+  bone.quaternion.copy(pq.multiply(q.clone().multiply(wq)));
+  bone.updateMatrixWorld(true);
+}
+/* cyclic-coordinate-descent onto a world target */
+
+
+/* A fist only reads as gripping if the ROPE sits in the palm — and the arm IK aims the
+   WRIST, which is a whole hand-length away. So: capture the hand's own axes at bind (fingers
+   direction, across-palm direction), then each frame build the orientation that lays the rope
+   across the palm, and offset the IK target back down the fingers axis so the palm, not the
+   wrist, lands on the rope. */
+const HAND = { xL:{}, zL:{}, yL:{}, palm:{}, q0:{},
+               mW:new THREE.Matrix4(), mL:new THREE.Matrix4(),
+               x:new THREE.Vector3(), y:new THREE.Vector3(), z:new THREE.Vector3(),
+               q:new THREE.Quaternion(), v:new THREE.Vector3(), w:new THREE.Vector3() };
+function captureHandBind(){
+  if(HAND.ready) return;
+  for(const side of ["Left","Right"]){
+    const h=HUMAN.B[side+"Hand"], mid=HUMAN.B[side+"HandMiddle1"],
+          idx=HUMAN.B[side+"HandIndex1"], pky=HUMAN.B[side+"HandPinky1"];
+    if(!h||!mid||!idx||!pky) return;
+    for(const b of [h,mid,idx,pky]) b.updateWorldMatrix(true,false);
+    const hp=new THREE.Vector3().setFromMatrixPosition(h.matrixWorld);
+    const mp=new THREE.Vector3().setFromMatrixPosition(mid.matrixWorld);
+    const ip=new THREE.Vector3().setFromMatrixPosition(idx.matrixWorld);
+    const pp=new THREE.Vector3().setFromMatrixPosition(pky.matrixWorld);
+    const q0=h.getWorldQuaternion(new THREE.Quaternion());
+    const inv=q0.clone().invert();
+    const xW=mp.clone().sub(hp); const palm=xW.length()||1; xW.divideScalar(palm);
+    const zW=ip.clone().sub(pp).normalize();
+    HAND.xL[side]=xW.clone().applyQuaternion(inv).normalize();
+    HAND.zL[side]=zW.clone().applyQuaternion(inv).normalize();
+    HAND.yL[side]=new THREE.Vector3().crossVectors(HAND.zL[side], HAND.xL[side]).normalize();
+    HAND.palm[side]=palm;
+    HAND.q0[side]=q0;
+  }
+  HAND.ready = true;
+}
+/* rope lies across the palm: fingers perpendicular to it, curling around it */
+function handGripQuat(side, ropeDirW, out){
+  HAND.z.copy(ropeDirW).normalize();
+  HAND.x.set(0,0,1).cross(HAND.z);                     // perpendicular, in the screen plane
+  if(HAND.x.lengthSq() < 1e-6) HAND.x.set(1,0,0);
+  HAND.x.normalize();
+  /* Both hands wrap fingers over the rope pointing DOWN toward the ground */
+  if(HAND.x.y > 0) HAND.x.negate();
+  HAND.y.crossVectors(HAND.z, HAND.x).normalize();
+  HAND.mW.makeBasis(HAND.x, HAND.y, HAND.z);
+  HAND.mL.makeBasis(HAND.xL[side], HAND.yL[side], HAND.zL[side]).transpose();
+  return out.setFromRotationMatrix(HAND.mW.multiply(HAND.mL));
+}
+
+/* CCD accumulates twist down a chain, which is what screwed the ankle. This solves a
+   two-bone limb analytically instead: work out the knee position in world space, then set
+   each bone's world orientation as "bind orientation, rotated so its bone axis points where
+   it should". No twist can creep in, and the knee can only sit in the plane we choose. */
+const LIMB = { p:new THREE.Vector3(), u:new THREE.Vector3(), n:new THREE.Vector3(),
+               k:new THREE.Vector3(), d:new THREE.Vector3(),
+               q:new THREE.Quaternion(), pq:new THREE.Quaternion(), cur:new THREE.Quaternion() };
+/* Cache each bone's rest orientation, aim axis and length, once per bone.
+   This used to bail on `if(HUMAN.bind) return`, which looks like a one-shot cache but is
+   called twice with different lists — arms first, then legs. The second call returned
+   immediately, the leg bones were never captured, and solveLimb's `if(!bindR||!bindM) return`
+   silently skipped both legs forever: they hung rigid from the hips at full extension,
+   ignoring the stance entirely. Guard per bone instead of per call. */
+function captureBind(names){
+  if(!HUMAN.bind) HUMAN.bind = {};
+  for(const n of names){
+    if(HUMAN.bind[n]) continue;
+    const b = HUMAN.B[n];
+    if(!b) continue;
+    const child = b.children.find(c => c.isBone) || b.children[0];
+    b.updateWorldMatrix(true,false);
+    const bp = new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    const q  = b.getWorldQuaternion(new THREE.Quaternion());
+    let axis = new THREE.Vector3(0,1,0), len = 1;
+    if(child){
+      child.updateWorldMatrix(true,false);
+      const cp = new THREE.Vector3().setFromMatrixPosition(child.matrixWorld);
+      axis = cp.clone().sub(bp);
+      len = axis.length() || 1;
+      axis.divideScalar(len);
+    }
+    HUMAN.bind[n] = { q, axis, len };
+  }
+}
+function setBoneWorldQuat(bone, qW){
+  bone.parent.getWorldQuaternion(LIMB.pq).invert();
+  bone.quaternion.copy(LIMB.pq.multiply(qW));
+  bone.updateWorldMatrix(false,false);
+}
+function aimBone(name, dirW){
+  const bind = HUMAN.bind[name], b = HUMAN.B[name];
+  if(!bind || !b) return;
+  setBoneWorldQuat(b, LIMB.q.setFromUnitVectors(bind.axis, dirW).multiply(bind.q));
+}
+/* targetW: world position for the tip. kneeFwd: which way the joint should break. */
+function solveLimb(rootName, midName, tipName, targetW, kneeFwd, levelWeight){
+  const bindR = HUMAN.bind[rootName], bindM = HUMAN.bind[midName];
+  const rootB = HUMAN.B[rootName];
+  if(!bindR || !bindM || !rootB) return;
+  rootB.updateWorldMatrix(true,false);
+  LIMB.p.setFromMatrixPosition(rootB.matrixWorld);
+  const L1 = bindR.len, L2 = bindM.len;
+  LIMB.u.copy(targetW).sub(LIMB.p);
+  let d = LIMB.u.length() || 1e-4;
+  LIMB.u.divideScalar(d);
+  /* Hard Anatomical Reach Clamp: prevent rubber-stretching by clamping reach to 94% max extension.
+     This ensures the elbow ALWAYS maintains a minimum 12-degree flexion bend. */
+  const maxReach = (L1 + L2) * 0.94;
+  const minReach = Math.abs(L1 - L2) + 0.05;
+  d = clamp(d, minReach, maxReach);
+  const a = (d*d + L1*L1 - L2*L2)/(2*d);
+  const h = Math.sqrt(Math.max(0, L1*L1 - a*a));
+  LIMB.n.copy(kneeFwd).addScaledVector(LIMB.u, -kneeFwd.dot(LIMB.u));
+  if(LIMB.n.lengthSq() < 1e-6) LIMB.n.set(0,0,1);
+  LIMB.n.normalize();
+  LIMB.k.copy(LIMB.p).addScaledVector(LIMB.u, a).addScaledVector(LIMB.n, h);
+  aimBone(rootName, LIMB.d.copy(LIMB.k).sub(LIMB.p).normalize());
+  aimBone(midName,  LIMB.d.copy(targetW).sub(LIMB.k).normalize());
+  /* the foot goes back to its bind orientation, i.e. sole flat, however the leg bent */
+  const tip = HUMAN.B[tipName], bindT = HUMAN.bind[tipName];
+  if(tip && bindT && levelWeight > 0){
+    tip.getWorldQuaternion(LIMB.cur);
+    setBoneWorldQuat(tip, LIMB.cur.slerp(bindT.q, levelWeight));
+  }
+}
+
+function ccdIK(chain, tip, targetW, iters){
+  for(let it=0; it<iters; it++){
+    for(let i=chain.length-1; i>=0; i--){
+      const b = chain[i];
+      const bp = bonePos(b, IK.v0);
+      const tp = bonePos(tip, IK.v1);
+      const a = IK.v2.copy(tp).sub(bp);
+      const c = IK.v3.copy(targetW).sub(bp);
+      if(a.lengthSq()<1e-8 || c.lengthSq()<1e-8) continue;
+      applyWorldDelta(b, IK.q0.setFromUnitVectors(a.normalize(), c.normalize()));
+    }
+  }
+}
+/* swing the middle joint around the root->target axis so elbows/knees point somewhere
+   anatomically sane instead of wherever CCD left them */
+function pole(rootB, midB, targetW, poleW){
+  const s = bonePos(rootB, IK.v0).clone();
+  const axis = IK.v1.copy(targetW).sub(s);
+  if(axis.lengthSq()<1e-8) return;
+  axis.normalize();
+  const e = bonePos(midB, IK.v2).clone().sub(s);
+  const eP = e.sub(axis.clone().multiplyScalar(e.dot(axis)));
+  const pW = poleW.clone().sub(s);
+  const pP = pW.sub(axis.clone().multiplyScalar(pW.dot(axis)));
+  if(eP.lengthSq()<1e-8 || pP.lengthSq()<1e-8) return;
+  eP.normalize(); pP.normalize();
+  let ang = Math.acos(clamp(eP.dot(pP), -1, 1));
+  if(eP.clone().cross(pP).dot(axis) < 0) ang = -ang;
+  applyWorldDelta(rootB, IK.q0.setFromAxisAngle(axis, ang));
+}
+
+let fabricNormalTex = null;
+function getFabricNormalMap(){
+  if(!fabricNormalTex){
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    const ctx = c.getContext("2d");
+    const imgData = ctx.createImageData(256, 256);
+    const data = imgData.data;
+    for(let y = 0; y < 256; y++){
+      for(let x = 0; x < 256; x++){
+        const idx = (y * 256 + x) * 4;
+        const nx = (Math.sin(x * 0.85) * 0.45) * 128 + 128;
+        const ny = (Math.cos(y * 0.85) * 0.45) * 128 + 128;
+        data[idx]     = Math.floor(nx);
+        data[idx + 1] = Math.floor(ny);
+        data[idx + 2] = 240;
+        data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    fabricNormalTex = new THREE.CanvasTexture(c);
+    fabricNormalTex.wrapS = fabricNormalTex.wrapT = THREE.RepeatWrapping;
+    fabricNormalTex.repeat.set(36, 36);
+  }
+  return fabricNormalTex;
+}
+
+function initHuman(gltf){
+  console.log("--> initHuman called with GLTF scene:", gltf);
+  const root = gltf.scene;
+  const fNormal = getFabricNormalMap();
+
+  root.traverse(o => {
+    if(o.isMesh || o.isSkinnedMesh){
+      o.castShadow = true;
+      o.receiveShadow = true;
+      o.frustumCulled = false;
+      if(o.isSkinnedMesh) HUMAN.mesh = o;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for(const m of mats){
+        if(!m) continue;
+        const nameLower = (o.name + " " + (m.name||"")).toLowerCase();
+        const isEye = nameLower.includes("eye") || nameLower.includes("lens");
+        if(isEye){
+          m.color.setHex(0xffffff);
+          m.roughness = 0.02;
+          m.metalness = 0.95;
+          m.envMapIntensity = 4.2;
+          if("clearcoat" in m){ m.clearcoat = 1.0; m.clearcoatRoughness = 0.01; }
+        } else {
+          m.normalMap = fNormal;
+          m.normalScale = new THREE.Vector2(0.55, 0.55);
+          m.metalness = 0.04;
+          m.roughness = 0.42;
+          m.envMapIntensity = 2.4;
+          if("sheen" in m){
+            m.sheen = 0.95;
+            m.sheenRoughness = 0.28;
+            if(m.sheenColor && m.sheenColor.setHex) m.sheenColor.setHex(0xffd5bb);
+          }
+          if("clearcoat" in m){ m.clearcoat = 0.25; m.clearcoatRoughness = 0.18; }
+        }
+        if(m.map) m.map.anisotropy = 8;
+        m.needsUpdate = true;
+      }
+    }
+    if(o.isBone){
+      const cleanName = o.name.replace(/^mixamorig:?/i, "").replace(/_\d+$/, "");
+      HUMAN.B[cleanName] = o;
+    }
+  });
+  if(!HUMAN.B.Hips && HUMAN.B.Pelvis) HUMAN.B.Hips = HUMAN.B.Pelvis;
+  for(const k in HUMAN.B) HUMAN.rest[k] = HUMAN.B[k].quaternion.clone();
+  if(HUMAN.B.Hips) HUMAN.restHip = HUMAN.B.Hips.position.clone();
+  HUMAN.root = root;
+  scene.add(root);
+  gripFists();
+  HUMAN.ready = true;
+  if(renderer && typeof renderer.compile === "function"){
+    try { renderer.compile(scene, camera); } catch(e){}
+  }
+  if(ready){
+    const frac = step ? scroll/step : 0; layout(); scroll = frac*step; target = Math.round(frac)*step;
+    /* the character arrives long after the first paint; settle him onto the line and repaint
+       immediately rather than waiting on the next animation frame, so he still shows up if
+       rAF is throttled (background tab, reduced-motion, an occluded window) */
+    for(let i=0;i<40;i++){ poseHuman(FIXED); placeCards(FIXED); stepRope(FIXED, 0.2, 0); }
+    drawRope();
+    renderer.render(scene, camera);
+  }
+}
+window.initHuman = initHuman;
+window.HUMAN = HUMAN;
+/* The hand is not a prop: it opens as it comes off the rope during recovery and clamps
+   shut as it takes load again. `closed` is 0..1. */
+const _fq = new THREE.Quaternion(), _fz = new THREE.Vector3(0,0,1);
+function setGrip(side, closed){
+  const dir = side==="Left" ? -1 : 1;
+  for(const f of ["Thumb","Index","Middle","Ring","Pinky"]){
+    for(let j=1;j<=3;j++){
+      const key = `${side}Hand${f}${j}`;
+      const b = HUMAN.B[key];
+      if(!b) continue;
+      const bend = (f==="Thumb" ? 0.60 : (j===1 ? 1.05 : 1.30)) * (0.22 + 0.78*closed);
+      b.quaternion.copy(HUMAN.rest[key]).multiply(_fq.setFromAxisAngle(_fz, dir*bend));
+    }
+  }
+}
+
+/* Wrist orientation for holding the mic UP to the mouth.
+   The old version gripped around a hardcoded axis that pointed down-and-into-screen, so the hand
+   folded inward and the mic pointed the wrong way from the mesh (which only rolls about Z). Grip
+   around the mic's ACTUAL handle axis instead — same convention as handGripQuat: HAND.z is the
+   axis the fingers wrap around. Since micMesh.rotation is (0,0,rotZ), the grille-up handle axis in
+   world is (-sin, cos, 0). A roll about that axis turns the back of the hand toward the camera so
+   the hand reads as presented, not edge-on. */
+const MIC_WRIST_ROLL = 0.9;   // radians; tuned so the back of the hand faces the viewer
+function micGripQuat(side, micRotZ, out){
+  const roll = MIC_WRIST_ROLL;
+  const rz = micRotZ || 0;
+  HAND.z.set(-Math.sin(rz), Math.cos(rz), 0).normalize();     // along the handle, grille-up
+  /* base perpendicular = straight at the camera (+Z), already ⊥ to HAND.z since HAND.z.z==0;
+     roll it about the handle axis to swing the palm/back of hand into presentation */
+  const cr = Math.cos(roll), sr = Math.sin(roll);
+  // (0,0,1) rotated by `roll` about HAND.z (Rodrigues; simplifies because base·z = 0)
+  HAND.x.set(HAND.z.y * sr, -HAND.z.x * sr, cr).normalize();
+  HAND.y.crossVectors(HAND.z, HAND.x).normalize();
+  HAND.x.crossVectors(HAND.y, HAND.z).normalize();
+
+  HAND.mW.makeBasis(HAND.x, HAND.y, HAND.z);
+  HAND.mL.makeBasis(HAND.xL[side], HAND.yL[side], HAND.zL[side]).transpose();
+  return out.setFromRotationMatrix(HAND.mW.multiply(HAND.mL));
+}
+
+/* The four fingers curl in one plane (local Z). The thumb must NOT: a thumb that curls on the
+   same axis just lies alongside the fingers, which is what stopped the hand reading as gripping
+   anything. A real clasp opposes — the thumb swings ACROSS the palm to meet the fingertips, so
+   it gets its own axis mixing curl (Z) with that cross-palm swing (Y). */
+const _fzThumb = new THREE.Vector3(0, -0.6, 0.8).normalize();
+function setMicGrip(closed){
+  const dir = -1; // -1 curls Mixamo RightHand fingers INWARD around handle!
+  /* Per-joint curl profile matters more than the totals. A real hand wrapping a handle bends the
+     MIDDLE knuckle (PIP, j2) hardest — that sharp fold is what makes the finger contour the
+     cylinder. Bending all three joints by similar moderate amounts instead gives a smooth circular
+     arc: the "balloon-round-a-ball" look. So j2 dominates, with the proximal (j1) and tip (j3)
+     joints softer. Overall curl is also tightened: the mic handle is now half its old diameter, so
+     the tips have to travel further in to actually meet the surface instead of closing on air.
+     Bends still fall off from middle→index→ring→pinky the way a relaxed grip staggers. */
+  const bends = {
+    Thumb : [1.04, 1.15, 0.81],
+    Index : [1.90, 1.85, 1.05],
+    Middle: [1.98, 1.95, 1.10],
+    Ring  : [1.35, 1.75, 0.95],
+    Pinky : [1.05, 1.60, 0.85]
+  };
+  for(const f in bends){
+    const isThumb = f === "Thumb";
+    const axis = isThumb ? _fzThumb : _fz;
+    /* the thumb opposes rather than follows, so it turns the other way about its own axis */
+    const sign = isThumb ? -dir : dir;
+    for(let j=1;j<=3;j++){
+      const key = `RightHand${f}${j}`;
+      const b = HUMAN.B[key];
+      if(!b) continue;
+      const bend = bends[f][j-1] * (0.15 + 0.85*closed);
+      b.quaternion.copy(HUMAN.rest[key]).multiply(_fq.setFromAxisAngle(axis, sign * bend));
+    }
+  }
+}
+
+function gripFists(){ setGrip("Left",1); setGrip("Right",1); }
+/* scale and stand him on the ground line, facing the rope */
+function placeHuman(){
+  if(!HUMAN.ready) return;
+  const r = HUMAN.root;
+  r.scale.setScalar(HUMAN.scale);
+  /* Revert to original puller facing angle along the web thread */
+  r.rotation.set(0, HUMAN.faceY, 0);
+  r.position.set(vx(humanX), vy(humanGroundY), 40);
+  r.updateMatrixWorld(true);
+  /* measure the arm off the rig rather than guessing: everything about where the rope can
+     be gripped, and how far a stroke travels, follows from it */
+  const sh = bonePos(HUMAN.B.LeftArm, new THREE.Vector3());
+  const hd = bonePos(HUMAN.B.LeftHand, new THREE.Vector3());
+  HUMAN.armLen  = sh.distanceTo(hd);
+  HUMAN.shoulder = { x: sh.x + W/2, y: H/2 - sh.y };
+  HUMAN.reach = HUMAN.armLen;
+  /* thigh + shin, measured the same way. The stance has to be derived from this: a foot
+     target further from the hip than the leg is long leaves CCD nothing to do but lock the
+     knee straight, which is what made him stand like a shop mannequin. */
+  const up = bonePos(HUMAN.B.LeftUpLeg, new THREE.Vector3());
+  const kn = bonePos(HUMAN.B.LeftLeg,   new THREE.Vector3());
+  const ft = bonePos(HUMAN.B.LeftFoot,  new THREE.Vector3());
+  HUMAN.legLen = up.distanceTo(kn) + kn.distanceTo(ft);
+}
+
+let humanX=0, humanGroundY=0;
+
+/* Sound coming out of the cups: rings that bloom on each beat and fade as they expand.
+   Spawned from the head bone, so they track her nodding. */
+/* Sound out of the cups, painted rather than outlined: three arcs that fade at both ends
+   and outward, so they read as air moving instead of as circles. */
+function waveTexture(){
+  const c=document.createElement("canvas"); c.width=c.height=256;
+  const x=c.getContext("2d");
+  x.translate(128,128);
+  for(const [r,w,a] of [[46,9,1],[76,7,0.62],[104,5,0.34]]){
+    const g=x.createLinearGradient(0,-r,0,r);
+    g.addColorStop(0,   "rgba(255,255,255,0)");
+    g.addColorStop(0.32,`rgba(255,255,255,${a})`);
+    g.addColorStop(0.5, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.68,`rgba(255,255,255,${a})`);
+    g.addColorStop(1,   "rgba(255,255,255,0)");
+    x.strokeStyle=g; x.lineWidth=w; x.lineCap="round";
+    x.beginPath(); x.arc(0,0,r,-0.62,0.62); x.stroke();
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.colorSpace=THREE.SRGBColorSpace;
+  return t;
+}
+const WAVE_TEX = waveTexture();
+const RING_GEO = new THREE.PlaneGeometry(1,1);
+const rings = [];
+/* pool grew from 14: speech takes 4 per beat and the mic now borrows from the same pool for its
+   fly-in trail and floor impact, which starved the speech rings at 14 */
+for(let i=0;i<26;i++){
+  const mat = new THREE.MeshBasicMaterial({ map:WAVE_TEX, color:0xC2603C, transparent:true, opacity:0, side:THREE.DoubleSide, depthWrite:false });
+  const m = new THREE.Mesh(RING_GEO, mat);
+  m.visible=false; scene.add(m);
+  rings.push({ m, mat, life:0, side:1, delay:0, power:0.5, tilt:0, at:null, sizeMul:1, fade:1.35 });
+}
+/* two arcs per ear, the second trailing the first, so each beat leaves as a little wave train */
+function spawnRings(power){
+  const want=[[1,0],[1,0.10],[-1,0],[-1,0.10]];
+  let i=0;
+  for(const r of rings){
+    if(i>=want.length) break;
+    if(r.life>0) continue;
+    r.life=1; r.side=want[i][0]; r.delay=want[i][1]; r.power=power;
+    r.tilt=(Math.random()-0.5)*0.32;                     // never twice the same shape
+    r.at=null; r.sizeMul=1; r.fade=1.35;
+    r.m.visible=false;
+    i++;
+  }
+}
+
+/* Same pool, but pinned to a fixed point in scene space instead of tracking the head bone —
+   this is what gives the mic a trail as it flies in and a ripple where it hits the floor.
+   `px`/`py` are stage pixels so callers can pass MIC_STATE.pos straight through. */
+function spawnRingsAt(px, py, pz, power, sizeMul, count, fade){
+  let i=0;
+  for(const r of rings){
+    if(i>=count) break;
+    if(r.life>0) continue;
+    r.life=1; r.power=power; r.delay=i*0.045;
+    r.side = i%2 ? -1 : 1;
+    r.tilt = (Math.random()-0.5)*1.6;                    // impacts throw arcs at mixed angles
+    r.at = { x:vx(px), y:vy(py), z:pz };
+    r.sizeMul = sizeMul;
+    r.fade = fade || 1.35;
+    r.m.visible=false;
+    i++;
+  }
+}
+function stepRings(dt){
+  const B=HUMAN.B;
+  if(!HUMAN.ready || !B.Head) return;
+  B.Head.updateWorldMatrix(true,false);
+  const hp = new THREE.Vector3().setFromMatrixPosition(B.Head.matrixWorld);
+  /* sizes are stage pixels, derived from her stature — HUMAN.scale is a model->px factor
+     in the hundreds and must not be used as a length */
+  const stature = HUMAN.scale * 1.66;
+  const ear = stature * 0.045;
+  /* His head is turned ~49°, so a world-X ear offset lands lopsided against the skull.
+     Work in the head's own basis instead: right/forward come straight off its world matrix,
+     so the two arcs stay equidistant from the skull centre no matter which way he faces. */
+  const he = B.Head.matrixWorld.elements;
+  const hRight = new THREE.Vector3(he[0],he[1],he[2]).normalize();
+  const hUp    = new THREE.Vector3(he[4],he[5],he[6]).normalize();
+  const hFwd   = new THREE.Vector3(he[8],he[9],he[10]).normalize();
+  /* centre of the skull volume: up from the head pivot toward ear level, then out in front of
+     the face. The forward push is along the head's own forward (⊥ to hRight) so adding it keeps
+     both sides equidistant from this centre. */
+  const cx = hp.x + hUp.x*stature*0.10 + hFwd.x*stature*0.22;
+  const cy = hp.y + hUp.y*stature*0.10 + hFwd.y*stature*0.22;
+  const cz = hp.z + hUp.z*stature*0.10 + hFwd.z*stature*0.22;
+  for(const r of rings){
+    if(r.life<=0){ if(r.m.visible) r.m.visible=false; continue; }
+    if(r.delay>0){ r.delay-=dt; r.m.visible=false; continue; }
+    r.life -= dt*(r.fade || 1.35);
+    const k = 1-clamp(r.life,0,1);
+    const size = stature*(0.15 + 0.17*k) * (0.75+0.35*r.power) * (r.sizeMul || 1);
+    r.m.visible = true;
+    if(r.at){
+      /* pinned ring (mic trail / floor impact): sits where it was spawned and expands in place */
+      r.m.position.set(r.at.x, r.at.y, r.at.z);
+    } else {
+      /* symmetric about the skull centre along the head's own right axis */
+      const off = r.side*ear*1.9;
+      r.m.position.set(cx + hRight.x*off, cy + hRight.y*off, cz + hRight.z*off);
+    }
+    r.m.scale.setScalar(size);
+    r.m.rotation.z = (r.side < 0 ? Math.PI : 0) + r.tilt;   // arcs open away from the head
+    r.mat.opacity = Math.pow(clamp(r.life,0,1),0.7)*0.34*(0.45+0.55*r.power);
+  }
+}
+
+/* sweat, kept from the earlier build — it sells the effort */
+const sweat = [];
+for(let i=0;i<18;i++){
+  const mat=MAT.drop.clone();
+  const m=new THREE.Mesh(GEO.ball, mat);
+  m.visible=false; scene.add(m);
+  sweat.push({ m, mat, life:0, x:0, y:0, z:0, vx:0, vy:0, r:4 });
+}
+
+/* =====================================================================
+   READING THE TESTIMONY ALOUD
+   =====================================================================
+   The music synthesiser that used to live here (three procedural grooves plus a file
+   loader) has been removed: the play control now reads the testimonial that is currently
+   centred on the line, using the browser speech engine, so the button does something that
+   belongs to the content instead of playing a backing track over it. */
+const SPEECH = {
+  speaking:false, idx:-1, utter:null, ringAt:0, idleFor:0, uiState:false,
+  timer:0,        // hang-guard countdown; the engine's own state is the primary terminator
+  sawLive:false,  // engine has confirmed it started, so silence now means it finished
+  deadFor:0,      // consecutive seconds the engine has reported nothing playing
+  supported: typeof window !== "undefined" && "speechSynthesis" in window,
+};
+
+/* Single funnel for the button state. Everything goes through here so the DOM can only ever
+   be written when the state actually changes, and `uiState` always mirrors what is on screen
+   — the per-frame resync in speechTick depends on that being true. */
+function speechUI(){
+  if(SPEECH.uiState === SPEECH.speaking) return;
+  SPEECH.uiState = SPEECH.speaking;
+  if(typeof onSpeechState === "function") onSpeechState(SPEECH.speaking);
+}
+
+/* A WebAudio sine drone used to play here alongside the real voice for the full duration of
+   every testimony. It was written as a stand-in for when speech synthesis is unavailable, but
+   it was never gated on that, so it buzzed underneath the narration on every playback. Removed
+   outright: when speech is unavailable the mic sequence now simply plays silently. */
+
+let currentAudioEl = null;
+
+/* After a testimony finishes reading, Spider-Man drops the mic and then hauls the NEXT card in
+   and settles — the line advances on its own, without auto-playing it. Only a natural finish
+   triggers this; a manual Stop or a card change (which call speechStop with no `completed` flag)
+   must not yank the line. The advance is delayed so the mic has left his hand first, and it is
+   cancelled if anything else takes over in the meantime. */
+let autoAdvanceTimer = null;
+function cancelAutoAdvance(){ if(autoAdvanceTimer){ clearTimeout(autoAdvanceTimer); autoAdvanceTimer = null; } }
+
+function speechStop(completed){
+  cancelAutoAdvance();
+  SPEECH.speaking = false;
+  SPEECH.idx = -1;
+  SPEECH.utter = null;
+  SPEECH.timer = 0;
+  SPEECH.sawLive = false;
+  SPEECH.deadFor = 0;
+  if(currentAudioEl){
+    try { currentAudioEl.pause(); currentAudioEl.currentTime = 0; } catch(e){}
+    currentAudioEl = null;
+  }
+  if(SPEECH.supported){
+    try { window.speechSynthesis.cancel(); } catch(e){}
+  }
+  /* Release the mic when the testimony ends. This is the single funnel for every stop — the
+     utterance ending on its own (onend), the user pressing Stop, and hauling to another card —
+     so the drop belongs here. requestMicDrop() no-ops if no mic is active and, mid-flight, only
+     arms the drop so the catch still reads. Without this call the mic was caught and held but
+     never let go. */
+  requestMicDrop();
+  speechUI();
+
+  if(completed){
+    const fromIdx = index;                       // the card that was just read
+    autoAdvanceTimer = setTimeout(() => {
+      autoAdvanceTimer = null;
+      /* only haul the next card in if nothing else took over: not replaying, and still parked
+         on the card we just read (the user hasn't navigated away during the drop) */
+      if(!SPEECH.speaking && index === fromIdx){
+        goTo(Math.round(scroll / step) + 1);
+      }
+    }, 1300);                                     // ~ mic drop + hand back on the rope, then pull
+  }
+}
+
+function speechSpeak(i){
+  cancelAutoAdvance();                           // a fresh play cancels any pending auto-haul
+  const k = ((i % DATA.length) + DATA.length) % DATA.length;
+  const d = DATA[k];
+  const text = d.quote + " " + d.name + ", " + d.role + ".";
+  SPEECH.speaking = true;
+  SPEECH.idx = k;
+  SPEECH.ringAt = 0;
+  SPEECH.idleFor = 0;
+  SPEECH.timer = Math.max(10, text.length * 0.09 * 2.5);
+  SPEECH.sawLive = false;
+  SPEECH.deadFor = 0;
+
+  if(currentAudioEl){
+    try { currentAudioEl.pause(); currentAudioEl.currentTime = 0; } catch(e){}
+    currentAudioEl = null;
+  }
+
+  /* Trigger 3D studio microphone flying in & Spider-Man catch */
+  triggerMicSequence();
+
+  /* Play pristine Microsoft Edge Neural Speech Audio (en-GB-RyanNeural) */
+  const audioFile = `assets/audio/testimony_${k}.mp3`;
+  const audio = new Audio(audioFile);
+  currentAudioEl = audio;
+
+  audio.play().then(() => {
+    speechUI();
+  }).catch(err => {
+    console.warn("Edge Neural Audio element fallback to Web Speech API", err);
+    if(SPEECH.supported){
+      try { window.speechSynthesis.cancel(); } catch(e){}
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.06; u.pitch = 1.12;
+      u.onend = () => { if(SPEECH.utter === u) speechStop(true); };
+      u.onerror = () => { if(SPEECH.utter === u) speechStop(); };
+      SPEECH.utter = u;
+      try { window.speechSynthesis.speak(u); } catch(e){}
+    }
+  });
+
+  audio.onended = () => {
+    if(currentAudioEl === audio) speechStop(true);
+  };
+  audio.onerror = () => {
+    if(currentAudioEl === audio) speechStop();
+  };
+
+  speechUI();
+  return true;
+}
+
+function speechTick(dt){
+  if(SPEECH.speaking){
+    SPEECH.timer -= dt;
+
+    /* Ask the engine what it is actually doing rather than trusting a character-count estimate.
+       Measured speech runs ~0.084 s/char but varies a lot by voice, so any fixed estimate is
+       either too short (it cancels mid-sentence — the bug this replaced) or so long it is
+       useless. `onend` is the normal terminator, but Chrome is known to drop it on long
+       utterances, so this catches that case within a frame or two instead of ~25s later.
+       Debounced because `speaking` reads false for a beat between queueing and starting. */
+    if(SPEECH.supported){
+      let live = false;
+      try { live = window.speechSynthesis.speaking || window.speechSynthesis.pending; } catch(e){ live = true; }
+      if(live){ SPEECH.sawLive = true; SPEECH.deadFor = 0; }
+      else if(SPEECH.sawLive){
+        SPEECH.deadFor = (SPEECH.deadFor || 0) + dt;
+        if(SPEECH.deadFor > 0.35){ speechStop(true); return; }
+      }
+    }
+
+    if(SPEECH.timer <= 0){          // last-resort backstop if the engine lies about both
+      speechStop(true);
+      return;
+    }
+  }
+  speechUI();
+  // Speech sound-wave arcs removed. The ring pool still serves the mic fly-in trail and
+  // floor-impact ripple via spawnRingsAt.
+}
+
+/* =====================================================================
+   LAYOUT
+   ===================================================================== */
+let W=0,H=0,K=1, hips={x:0,y:0}, gripPoint={x:0,y:0};
+let cardW=0, cardH=0, step=0, span=0, threadLen=0, s0=0, ropeRestLen=0, lenRatio=1;
+let anchorBase={x:0,y:0}, anchorR={x:0,y:0}, anchorL={x:0,y:0};
+const rope = { pts:[], cum:[], seg:0 };
+
+function layout(){
+  const w=stage.clientWidth, h=stage.clientHeight;
+  if(w<120 || h<120) return false;
+  W=w; H=h;
+  const aspect = W / H;
+  const narrow = W < 760;
+  const mobile = W < 540;
+
+  /* Card scale & proportions: 80% of stage width on desktop, 88% on mobile */
+  cardW = Math.min(W * (mobile ? 0.88 : (narrow ? 0.82 : 0.80)), 860);
+  cardH = cardW * (mobile ? 0.52 : 0.44);
+  const gap = W * (mobile ? 0.06 : (narrow ? 0.04 : 0.05));
+  step = cardW + gap;
+  span = cardW - CFG.card.ringInset*2;
+  threadLen = H * 0.045;
+
+  /* Grounded Superhero Stature & Framing:
+     Spidey stands on floor line (humanGroundY = 0.96 H), stature scales responsively */
+  humanGroundY = H * (mobile ? 0.98 : (narrow ? 0.98 : 0.96));
+  const stature = H * (mobile ? 0.48 : (narrow ? 0.54 : 0.65));
+  const lineY   = humanGroundY - stature*0.74;
+  humanX        = Math.max(W * (mobile ? 0.24 : (narrow ? 0.20 : 0.15)), stature * 0.42);
+  HUMAN.scale   = stature / 1.66;
+  placeHuman();
+  sizeMic();      // keeps the mic proportionate to him, including mid-sequence resizes
+
+  cardH = Math.min(cardH, (H*0.945) - lineY - threadLen);   // hang from the line down to floor line
+
+  /* the rope starts at her fists: grip point comes off the measured shoulder and arm */
+  const armLen = HUMAN.ready ? HUMAN.armLen : (humanGroundY-lineY)*0.34;
+  const shX    = HUMAN.ready ? HUMAN.shoulder.x : humanX;
+  gripPoint  = { x: shX + armLen*0.62, y: lineY };
+  anchorBase = { ...gripPoint };
+  anchorR    = { x: W + cardW + 360, y: lineY - H*0.03 };
+  anchorL    = { ...anchorBase };
+
+  const legL = HUMAN.legLen || armLen*1.55;
+  HUMAN.stanceFront = legL * (mobile ? 0.18 : (narrow ? 0.22 : 0.30));
+  HUMAN.stanceBack  = legL * (mobile ? 0.14 : (narrow ? 0.17 : 0.23));
+
+  /* Responsive camera frustum / FOV scaling:
+     On narrow / portrait screens (aspect < 1.1), dynamically expand camera FOV */
+  camera.fov = aspect < 1.1 ? 30 * (1.1 / Math.max(0.55, aspect)) : 30;
+  camera.aspect = aspect;
+  const camDist = (H/2) / Math.tan((camera.fov*Math.PI/180)/2);
+  camera.position.set(0,0,camDist);
+  camera.updateProjectionMatrix();
+
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1, 1.5));
+  renderer.setSize(W,H,false);
+
+  key.position.set(0.45*W, 0.65*H, 650);
+  const sc=key.shadow.camera;
+  sc.left=-W*0.9; sc.right=W*0.9; sc.top=H*0.9; sc.bottom=-H*0.9; sc.near=100; sc.far=3000;
+  sc.updateProjectionMatrix();
+  fill.position.set(-0.55*W, 0.25*H, 450);
+  rim.position.set(0.25*W, -0.55*H, -380);
+  rim2.position.set(-0.3*W, 0.4*H, -300);
+  bounce.position.set(0, -0.5*H, 200);
+  wall.position.set(0,0,-150);
+  wall.scale.set(W*2.4, H*2.4, 1);
+  floor.position.set(0, vy(humanGroundY), 120);
+  floor.scale.set(W*2.4, 600, 1);
+
+  const N=CFG.rope.points;
+  rope.pts.length=0;
+  for(let i=0;i<N;i++){
+    const t=i/(N-1);
+    const x=lerp(anchorBase.x, anchorR.x, t);
+    const y=lerp(anchorBase.y, anchorR.y, t) + Math.sin(Math.PI*t)*H*CFG.rope.sag;
+    rope.pts.push({x,y,px:x,py:y,fx:0,fy:0,pin:(i===0||i===N-1)});
+  }
+  const straight=Math.hypot(anchorR.x-anchorBase.x, anchorR.y-anchorBase.y);
+  rope.seg=(straight/(N-1))*CFG.rope.slack;
+  ropeRestLen=rope.seg*(N-1);
+  lenRatio=ropeRestLen/(anchorR.x-anchorBase.x);
+  const activeCX = W*(narrow?0.26:0.075) + cardW/2;
+  s0 = (activeCX-anchorBase.x)*lenRatio;
+
+  const dpr = Math.min(devicePixelRatio||1, 2) * 1.35;
+  for(const c of cards){
+    if(c.tex) c.tex.dispose();
+    c.tex = paintCard(c.d, cardW, cardH, dpr);
+    c.mat.map = c.tex;
+    c.mat.needsUpdate = true;
+  }
+  buildCum();
+  return true;
+}
+
+/* =====================================================================
+   ROPE SIM
+   ===================================================================== */
+function buildCum(){
+  const p=rope.pts; rope.cum=[0];
+  for(let i=1;i<p.length;i++) rope.cum[i]=rope.cum[i-1]+Math.hypot(p[i].x-p[i-1].x, p[i].y-p[i-1].y);
+}
+function atLength(s){
+  const p=rope.pts, cum=rope.cum, n=p.length;
+  if(s<=0){
+    const levelY = (fistHi && fistHi.y) ? fistHi.y : anchorL.y;
+    return { x: p[0].x + s, y: levelY, ang: 0, i: 0, t: 0 };
+  }
+  const total=cum[n-1];
+  if(s>=total){
+    const dx=p[n-1].x-p[n-2].x, dy=p[n-1].y-p[n-2].y, d=Math.hypot(dx,dy)||1, o=s-total;
+    return { x:p[n-1].x+dx/d*o, y:p[n-1].y+dy/d*o, ang:Math.atan2(dy,dx), i:n-2, t:1 };
+  }
+  let lo=0, hi=n-1;
+  while(hi-lo>1){ const mid=(lo+hi)>>1; if(cum[mid]<=s) lo=mid; else hi=mid; }
+  const segLen=cum[lo+1]-cum[lo]||1, t=(s-cum[lo])/segLen, a=p[lo], b=p[lo+1];
+  return { x:lerp(a.x,b.x,t), y:lerp(a.y,b.y,t), ang:Math.atan2(b.y-a.y,b.x-a.x), i:lo, t };
+}
+const LOAD_KERNEL=[0.34,0.22,0.22,0.11,0.11], LOAD_OFF=[0,-1,1,-2,2];
+function addForceAt(loc, fx, fy){
+  const p=rope.pts, n=p.length, i=loc.i, t=loc.t;
+  for(let k=0;k<LOAD_KERNEL.length;k++){
+    const wgt=LOAD_KERNEL[k], o=LOAD_OFF[k], a=i+o, b=i+1+o;
+    if(a>0&&a<n-1){ p[a].fx+=fx*(1-t)*wgt; p[a].fy+=fy*(1-t)*wgt; }
+    if(b>0&&b<n-1){ p[b].fx+=fx*t*wgt;     p[b].fy+=fy*t*wgt; }
+  }
+}
+function stepRope(dt, gustNow, tension){
+  const p=rope.pts, dt2=dt*dt, g=CFG.rope, last=p.length-1;
+  p[0].x=anchorL.x; p[0].y=anchorL.y; p[0].px=anchorL.x; p[0].py=anchorL.y;
+  p[last].x=anchorR.x; p[last].y=anchorR.y; p[last].px=anchorR.x; p[last].py=anchorR.y;
+  const sagAmp=H*g.sag;
+  for(let i=1;i<last;i++){
+    const q=p[i], t=i/last;
+    const bx=lerp(anchorL.x, anchorR.x, t);
+    const by=lerp(anchorL.y, anchorR.y, t)+Math.sin(Math.PI*t)*sagAmp;
+    const wx=gustNow*g.windX*(0.85+0.55*Math.sin(T*1.7+q.x*0.011));
+    const wy=gustNow*g.windY*Math.sin(T*2.3+q.x*0.019);
+    const ax=q.fx+wx+(bx-q.x)*g.stiff;
+    const ay=q.fy+wy+g.gravity+(by-q.y)*g.stiff;
+    const vxx=(q.x-q.px)*g.damp, vyy=(q.y-q.py)*g.damp;
+    q.px=q.x; q.py=q.y;
+    q.x+=vxx+ax*dt2; q.y+=vyy+ay*dt2;
+    q.fx=0; q.fy=0;
+  }
+  const rest=rope.seg*(1-tension*0.022);
+  for(let k=0;k<g.iterations;k++) for(let i=0;i<last;i++){
+    const a=p[i], b=p[i+1];
+    let dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy); if(d===0) d=1e-4;
+    const diff=(d-rest)/d*0.5, ox=dx*diff, oy=dy*diff;
+    if(!a.pin){ a.x+=ox; a.y+=oy; }
+    if(!b.pin){ b.x-=ox; b.y-=oy; }
+  }
+  const sm=0.16;
+  for(let i=1;i<last;i++){
+    const q=p[i], a=p[i-1], b=p[i+1];
+    q.x+=((a.x+b.x)*0.5-q.x)*sm;
+    q.y+=((a.y+b.y)*0.5-q.y)*sm;
+  }
+  buildCum();
+}
+
+const _linePts=[], _lineArc=[], _freePts=[], _freeArc=[];
+for(let i=0;i<LINE_SAMPLES;i++){ _linePts.push({x:0,y:0,z:0}); _lineArc.push(0); }
+for(let i=0;i<FREE_SAMPLES;i++){ _freePts.push({x:0,y:0,z:0}); _freeArc.push(0); }
+
+function drawRope(){
+  /* Sample the simulated line by arc length: the helix needs far denser samples than the
+     56 sim points, and a constant arc step keeps the lay of the rope even. */
+  const visible = Math.min(rope.cum[rope.cum.length-1], W + cardW*0.6 + 300);
+  const stepS = visible/(LINE_SAMPLES-1);
+  for(let i=0;i<LINE_SAMPLES;i++){
+    const sArc = i*stepS, a = atLength(sArc);
+    _linePts[i].x = vx(a.x); _linePts[i].y = vy(a.y); _linePts[i].z = 0;
+    _lineArc[i] = sArc;
+  }
+  /* the lay of the rope shifts by exactly the length she has hauled, so the strands are
+     seen running through her fists rather than the rope being a static prop */
+  updateRope(line, _linePts, _lineArc, CFG.rope.radius, CFG.rope.strandR, haulTravel);
+
+  /* The web thread passes through Spidey's hands, wraps tightly around his waist/lower back
+     at the EXACT SAME LEVEL HEIGHT as the right-side clothesline (imaginary circular pulley system),
+     and exits straight off-screen to anchorL. */
+  const f1 = fistHi, f2 = fistLo;
+  const hX = humanX, levelY = (fistHi && fistHi.y) ? fistHi.y : anchorL.y;
+  
+  /* 3D waypoints around Spidey's body at levelY height */
+  const reach = HUMAN.reach || 100;
+  const pRightFlank = { x: hX + reach * 0.12, y: levelY, z: 42 };
+  const pBackWaist  = { x: hX - reach * 0.08, y: levelY, z: 18 }; // Hugs tightly behind lower back!
+  const pLeftFlank  = { x: hX - reach * 0.28, y: levelY, z: 32 };
+  const pOutLeft    = { x: -W * 0.1,          y: levelY, z: 0  };
+
+  for(let i=0; i<_freePts.length; i++){
+    const t = i / (_freePts.length - 1);
+    let x, y, z;
+    if(t < 0.15){
+      // Taut line between leading fist and trailing fist
+      const k = t / 0.15;
+      x = lerp(f1.x, f2.x, k);
+      y = lerp(f1.y, f2.y, k);
+      z = lerp(f1.z, f2.z, k);
+    } else if(t < 0.65){
+      // Wrap around right flank, behind lower back, around left hip AT LEVEL HEIGHT (y = levelY)
+      const k = (t - 0.15) / 0.50;
+      if(k < 0.5){
+        const m = k / 0.5;
+        x = lerp(pRightFlank.x, pBackWaist.x, easeIO(m));
+        y = levelY;
+        z = lerp(pRightFlank.z, pBackWaist.z, easeIO(m));
+      } else {
+        const m = (k - 0.5) / 0.5;
+        x = lerp(pBackWaist.x, pLeftFlank.x, easeIO(m));
+        y = levelY;
+        z = lerp(pBackWaist.z, pLeftFlank.z, easeIO(m));
+      }
+    } else {
+      // Straight off-screen to left anchor at level height
+      const k = (t - 0.65) / 0.35;
+      x = lerp(pLeftFlank.x, pOutLeft.x, k);
+      y = levelY;
+      z = lerp(pLeftFlank.z, pOutLeft.z, k);
+    }
+    _freePts[i].x = vx(x);
+    _freePts[i].y = vy(y);
+    _freePts[i].z = z;
+    _freeArc[i] = i ? _freeArc[i-1] + Math.hypot(_freePts[i].x - _freePts[i-1].x, _freePts[i].y - _freePts[i-1].y, _freePts[i].z - _freePts[i-1].z) : 0;
+  }
+  updateRope(freeEnd, _freePts, _freeArc, CFG.rope.radius*0.96, CFG.rope.strandR*0.96, haulTravel);
+}
+
+/* =====================================================================
+   CAROUSEL STATE
+   ===================================================================== */
+let scroll=0, scrollV=0, lastScroll=0, target=0, index=0;
+let T=0, u=0, effort=0, effortS=0, tugPulse=0;
+let gust=0.34, gustTarget=0.34, nextGust=2;
+let blinkAt=1.6, blink=0, earTwitch=0, nextTwitch=3;
+let sweatTimer=0, foreheadAbs={x:150,y:100};
+let haulTravel=0, slackPay=0;                 // rope that has run through her hands
+let leanS=0, leanV=0, headLag=0;               // posture spring, and the head trailing it
+let bob=0, bobV=0;                             // head nod, driven by the beat
+const gripS={Left:0, Right:0};                 // how closed each fist is
+const footOff={Left:0, Right:0};               // per-foot re-brace offset
+let footDrift=0;
+const STEP={active:false, side:"Right", t:0, from:0, to:0};
+let fistW={x:0,y:0}, fistBackW={x:0,y:0}, fistHi={x:0,y:0,z:0}, fistLo={x:0,y:0,z:0};
+/* The idle head-rub gesture that used to live here has been removed. It was authored in stage
+   fractions (stature*0.88) which, on a character turned ~49 degrees from camera, resolved to
+   his sternum rather than his head — the arm lifted, the hand arrived mid-chest and the motion
+   reversed, reading as a half-finished gesture on a loop. */
+let drag={active:false,id:null,x0:0,scroll0:0,dx:0,lastX:0,lastT:0,vel:0,moved:false};
+let waveBlend=1;                               // 0 = mid-haul, 1 = braced two-handed hold
+
+function goTo(i){ target=i*step; announce(i); }
+window.goTo = goTo;
+function nudge(dir){ target+=dir*step; announce(Math.round(target/step)); }
+function announce(i){
+  const k=((i%DATA.length)+DATA.length)%DATA.length;
+  const d=DATA[k];
+  if(statusEl){
+    statusEl.textContent = `Testimonial ${k + 1} of ${DATA.length}: ${d.name}, ${d.role} says: “${d.quote}”`;
+  }
+}
+stage.addEventListener("keydown", e => {
+  if(e.key === "ArrowLeft" || e.key === "ArrowUp"){ nudge(-1); e.preventDefault(); }
+  else if(e.key === "ArrowRight" || e.key === "ArrowDown"){ nudge(1); e.preventDefault(); }
+  else if(e.key === "Home"){ goTo(0); e.preventDefault(); }
+  else if(e.key === "End"){ goTo(DATA.length - 1); e.preventDefault(); }
+  else if(e.key === " " || e.key === "Enter"){
+    if(e.target === stage){ togglePlay(e); e.preventDefault(); }
+  }
+});
+const MOUSE = { x: 0, y: 0, targetX: 0, targetY: 0, active: false };
+
+/* Track the cursor ANYWHERE on the page, measured from the stage centre, so his gaze follows the
+   pointer over the cards, the header and the margins too — not just while it is over the stage.
+   Binding to the stage alone (and recentring on pointerleave) meant his head snapped back to centre
+   the moment the cursor moved onto a quote card, which read as the tracking being broken. The yaw/
+   pitch are clamped downstream, so allowing the normalised target past ±1 just lets an off-stage
+   cursor still pull his gaze fully to that side. */
+function updateMouseTarget(e){
+  const rect = stage.getBoundingClientRect();
+  if(!rect.width || !rect.height) return;
+  MOUSE.targetX = clamp(((e.clientX - rect.left) - rect.width * 0.5) / (rect.width * 0.5), -1.6, 1.6);
+  MOUSE.targetY = clamp(((e.clientY - rect.top)  - rect.height * 0.5) / (rect.height * 0.5), -1.6, 1.6);
+  MOUSE.active = true;
+}
+window.addEventListener("pointermove", updateMouseTarget, { passive: true });
+
+/* Only recentre when the cursor actually leaves the window (no relatedTarget on the way out),
+   not every time it crosses onto a child element. */
+document.addEventListener("pointerout", e => {
+  if(!e.relatedTarget){ MOUSE.targetX = 0; MOUSE.targetY = 0; }
+});
+
+const NO_DRAG_SELECTOR = ".play-controls-overlay, .dots, button, [role='tab']";
+stage.addEventListener("pointerdown", e => {
+  if(e.target.closest && e.target.closest(NO_DRAG_SELECTOR)) return;
+  if(drag.active) return;
+  drag.active=true; drag.id=e.pointerId;
+  drag.x0=e.clientX; drag.scroll0=scroll; drag.dx=0; drag.moved=false;
+  drag.lastX=e.clientX; drag.lastT=performance.now(); drag.vel=0;
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener("pointermove", e => {
+  if(!drag.active || e.pointerId!==drag.id) return;
+  drag.dx=e.clientX-drag.x0;
+  if(Math.abs(drag.dx)>4){ drag.moved=true; killHint(); }
+  const now=performance.now(), dt=Math.max(8, now-drag.lastT);
+  /* velocity off the last two events alone is very noisy at high pointer rates, which made
+     flick detection fire inconsistently; keep a running average so a flick reads as a flick */
+  const raw=(e.clientX-drag.lastX)/dt*1000;
+  drag.vel = drag.vel===0 ? raw : lerp(drag.vel, raw, 0.32);
+  drag.lastX=e.clientX; drag.lastT=now;
+  scroll=drag.scroll0-drag.dx;
+  target=scroll;
+});
+function endDrag(e){
+  if(!drag.active || (e && e.pointerId!==drag.id)) return;
+  drag.active=false;
+  const frac=-drag.dx/step;
+  let i=Math.round(drag.scroll0/step);
+  if(Math.abs(drag.vel)>CFG.motion.flickThreshold) i += drag.vel<0 ? 1 : -1;
+  else if(Math.abs(frac)>CFG.motion.dragThreshold)  i += frac>0 ? 1 : -1;
+  target=i*step;
+  announce(i);
+}
+stage.addEventListener("pointerup", endDrag);
+stage.addEventListener("pointercancel", endDrag);
+
+/* =====================================================================
+   POSE — Spider-Man: braced two-handed hold vs effortful web-thread hauling
+   =====================================================================
+   IDLE is not "standing around": he is still carrying the weight of five
+   loaded cards, so both fists stay closed on the line in a staggered
+   tug-of-war grip (lead hand out along the rope, trail hand in near the
+   hip), hips sat back, knees soft, torso countering the pull. Only breath
+   and small weight shifts move.
+   PULLING: deeper crouch, stronger backward lean, wide diagonal arm
+   trajectory, shoulder twist into the pull — real exertion. */
+const _gT=new THREE.Vector3(), _pole=new THREE.Vector3(), _axis=new THREE.Vector3(0,0,1);
+const _hipQ=new THREE.Quaternion(), _hipOff=new THREE.Vector3();
+const _hipPos=new THREE.Vector3(), _hipScl=new THREE.Vector3();
+
+/* Offset the hips by a world-space amount in stage pixels.
+   This rig is Z-up (the pelvis rest offset is [0, 0.006, 1.053] — its height is on local Z),
+   so the old code, which nudged `hips.position.y` by a multiple of `restHip.y`, was scaling
+   every crouch by 0.006 instead of ~1.05 and pushing it along the wrong axis. The squat,
+   the hip drop and the weight shift were all effectively zero, which is why the knees never
+   unlocked. Converting through the parent's world rotation keeps this correct on any rig. */
+function offsetHips(downPx, backPx, sidePx){
+  const B=HUMAN.B;
+  if(!B.Hips || !HUMAN.restHip) return;
+  B.Hips.position.copy(HUMAN.restHip);
+  const parent = B.Hips.parent;
+  if(!parent) return;
+  /* decompose rather than assume HUMAN.scale: this GLB nests the armature under Sketchfab /
+     FBX wrapper nodes that carry their own scale, so the cumulative factor is not the one we
+     set on the root */
+  parent.updateWorldMatrix(true,false);
+  parent.matrixWorld.decompose(_hipPos, _hipQ, _hipScl);
+  const s = (Math.abs(_hipScl.x)+Math.abs(_hipScl.y)+Math.abs(_hipScl.z))/3;
+  if(!(s>1e-9)) return;
+  _hipOff.set(sidePx, -downPx, backPx).applyQuaternion(_hipQ.invert()).divideScalar(s);
+  B.Hips.position.add(_hipOff);
+}
+
+function handStroke(phase){
+  const p=((phase%1)+1)%1, pullEnd=0.65;
+  if(p<pullEnd){
+    const k=easeIO(p/pullEnd);
+    return { s: k, out: 0, grip: 1, drive: Math.sin(Math.PI*(p/pullEnd)) };
+  }
+  const k=easeIO((p-pullEnd)/(1-pullEnd));
+  return { s: 1-k, out: Math.sin(Math.PI*k)*1.2, grip: 0.15, drive: 0 };
+}
+
+function poseHuman(dt){
+  const B=HUMAN.B, R=HUMAN.rest, grip=gripPoint;
+
+  const idle = 1 - clamp(effortS*3.5, 0, 1);
+
+  /* --- holdBlend: 1 = braced hold, 0 = mid-haul. Eased rather than snapped so the
+         transition in and out of a stroke reads as a shift of weight, not a cut. --- */
+  const holdTarget = clamp(1 - effortS*4.2, 0, 1);
+  waveBlend = lerp(waveBlend, holdTarget, 1 - Math.pow(0.015, dt));
+  const wb = clamp(waveBlend, 0, 1);
+  const pb = 1 - wb;    // pull blend
+
+  /* slow idle life: a long breath and a much slower secondary sway, so nothing ticks */
+  const breathe = Math.sin(T*0.85);
+  const sway    = Math.sin(T*0.33 + 0.7);
+  /* teen idle micro-animation: slow weight shift and casual head/hand movement */
+  const teenSway   = Math.sin(T * 1.05);          // weight shift, ~6s full cycle
+  const headLook   = Math.sin(T * 0.785);          // slow head turn, ~8s cycle
+  const headTilt   = Math.sin(T * 0.52 + 0.8);     // slow head tilt, ~12s cycle
+  const handDriftT = T * 0.9;                      // micro-drift on idle hands
+
+  leanV += ((effortS - leanS)*CFG.human.leanK - leanV*CFG.human.leanC)*dt;
+  leanS = clamp(leanS + leanV*dt, 0, 1.6);
+  const E = leanS;
+  headLag = lerp(headLag, leanS, 1-Math.pow(0.02, dt));
+
+  let hx=anchorR.x-grip.x, hy=anchorR.y-grip.y;
+  const hlen=Math.hypot(hx,hy)||1, rdx=hx/hlen, rdy=hy/hlen;
+
+  const A=handStroke(u), Bs=handStroke(u+0.5);
+  const stroke=Math.max(A.drive,Bs.drive);
+  const decay = 1-Math.pow(CFG.human.gripK, dt);
+
+  /* --- FINGER POSING ---
+     Both fists stay closed on the line at all times. During a stroke each hand releases
+     only on its own recovery arc (handStroke.grip drops to 0), so there is always one
+     hand loaded — a hand that opens in mid-air holding nothing was the main thing that
+     read as "not actually gripping". A fist never opens past 0.55. */
+  const hauling = clamp(effortS*4, 0, 1);
+  gripS.Left  = lerp(gripS.Left,  Math.max(A.grip,  wb), decay);
+  gripS.Right = lerp(gripS.Right, Math.max(Bs.grip, wb * 0.6), decay);
+  setGrip("Left",  0.55 + 0.45*gripS.Left);
+  setGrip("Right", 0.42 + 0.58*gripS.Right);
+  const reach = HUMAN.reach;
+
+  /* --- PULL trajectory: authentic horizontal hand-over-hand cable haul --- */
+  /* Haul stroke stays on/near the horizontal rope line (reach point -> pull-back point) */
+  const reachPt = { x: grip.x + reach*0.28, y: grip.y + reach*0.02 };
+  const pullPt  = { x: grip.x - reach*0.20, y: grip.y + reach*0.08 };
+  
+  const alongPull = (st, out) => ({
+    x: lerp(reachPt.x, pullPt.x, st) + out*reach*0.08,
+    y: lerp(reachPt.y, pullPt.y, st) - out*reach*0.06
+  });
+
+  /* --- STAGGER EFFECT ("Man Pulling Rope with stagger"): High-frequency ratchet jitter under heavy load --- */
+  const staggerAmp = 2.6 * pb * stroke * clamp(effortS * 3.0, 0, 1.2);
+  const staggerX   = (Math.sin(T * 58) * 0.65 + (Math.random() - 0.5) * 0.7) * staggerAmp;
+  const staggerY   = (Math.cos(T * 52) * 0.45 + (Math.random() - 0.5) * 0.5) * staggerAmp;
+
+  const gA = alongPull(A.s, A.out);   gA.out = A.out;   gA.st = A.s;
+  const gB = alongPull(Bs.s, Bs.out); gB.out = Bs.out;  gB.st = Bs.s;
+  
+  /* Apply stagger ratchet offset during active haul strokes */
+  if(A.grip > 0.5){ gA.x += staggerX; gA.y += staggerY; }
+  if(Bs.grip > 0.5){ gB.x += staggerX; gB.y += staggerY; }
+
+  for(const k of ["Hips","Spine","Spine1","Spine2","Spine3","Neck","Head",
+                  "LeftShoulder","LeftArm","LeftForeArm","LeftHand",
+                  "RightShoulder","RightArm","RightForeArm","RightHand",
+                  "LeftUpLeg","LeftLeg","LeftFoot","RightUpLeg","RightLeg","RightFoot"]){
+    if(B[k]) B[k].quaternion.copy(R[k]);
+  }
+
+  /* --- HIPS: upright, straight posture ("not a big job for Spidey") --- */
+  const pullLoad = clamp(0.20 + 0.50*stroke, 0, 1) * (0.35 + 0.65*E);
+  const load = pullLoad * pb;
+  const legL = HUMAN.legLen || HUMAN.armLen*1.55 || 1;
+
+  /* Keep posture tall and upright: minimal hip drop, upright hips */
+  const dropPx = legL * (0.05 + 0.03*load + 0.02*wb*teenSway*teenSway) - legL*0.01*wb*breathe;
+  const backPx = legL * (0.03 + 0.02*load);
+  const sidePx = legL * (0.018 * wb * sway + 0.04 * wb * teenSway);
+  offsetHips(dropPx, backPx, sidePx);
+  B.Hips.quaternion.copy(R.Hips)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(1,0,0), 0.06*load))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,1,0), wb * 0.06 * (1 + 0.3*teenSway)))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,0,1), wb * 0.03 * teenSway));
+
+  /* --- SPINE & SHOULDERS: straight, effortless superhero stance --- */
+  const leanEach = -0.02 * wb;
+  const breath = breathe*0.018*idle;
+  const idleTwist = wb * 0.04 * sway;
+
+  /* Subtle shoulder protraction */
+  if(B.LeftShoulder){
+    B.LeftShoulder.quaternion.copy(R.LeftShoulder)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,1,0), -0.08 * pb * A.grip))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,0,1), 0.05 * pb * stroke));
+  }
+  if(B.RightShoulder){
+    B.RightShoulder.quaternion.copy(R.RightShoulder)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,1,0), 0.08 * pb * Bs.grip))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,0,1), -0.05 * pb * stroke));
+  }
+
+  for(const [k,w,si] of [["Spine",1.0,0],["Spine1",0.85,1],["Spine2",0.65,2],["Spine3",0.5,3]]){
+    if(!B[k]) continue;
+    const sCurve = wb * (si < 2 ? -0.02 * w : 0.03 * w);
+    const shoulderDrop = wb * (si >= 2 ? 0.02 * teenSway : 0);
+    const pullBendX = 0;   // straight spine, effortless pull
+    const pullTwistY = pb * 0.06 * w * stroke;
+
+    B[k].quaternion.copy(R[k])
+      .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(1,0,0), breath*w + sCurve + pullBendX))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(1,0,0), leanEach*w))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,1,0), (0.04*w*(1-stroke)*pb + idleTwist*w + pullTwistY)))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,0,1), stroke*0.05*w*pb + shoulderDrop))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,0,1), wb * 0.015 * w * teenSway));
+  }
+  /* --- MOUSE POINTER HEAD TRACKING ---
+     Snappier follow: base 1e-6 converges ~95% in ~0.22s (was 0.001 → ~0.45s, which lagged enough
+     that a quick cursor move barely moved him and read as "not tracking"). Frame-rate independent,
+     so it behaves the same on a 20fps low-end device as at 60fps. Slightly wider yaw/pitch so the
+     turn is unmistakable. */
+  const mouseDecay = 1 - Math.pow(0.000001, dt);
+  MOUSE.x = lerp(MOUSE.x, MOUSE.targetX, mouseDecay);
+  MOUSE.y = lerp(MOUSE.y, MOUSE.targetY, mouseDecay);
+
+  const mousePitch = clamp(-MOUSE.y * 0.42, -0.48, 0.48);
+  const mouseYaw   = clamp(MOUSE.x * 0.62, -0.72, 0.72);
+  const mouseRoll  = clamp(MOUSE.x * 0.09, -0.14, 0.14);
+
+  const micHeadWeight = MIC_STATE.phase === "HELD" || MIC_STATE.phase === "CATCH" ? 0.25 : 1.0;
+  const lookPitch = mousePitch * micHeadWeight;
+  const lookYaw   = (wb * (-0.08 + 0.10*headLook) + mouseYaw) * micHeadWeight;
+  const lookRoll  = (wb * (0.04 * headTilt) + mouseRoll) * micHeadWeight;
+
+  /* --- HEAD: confident superhero head tracking mouse pointer --- */
+  if(B.Neck) B.Neck.quaternion.copy(R.Neck)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(1,0,0), lerp(-0.02 + 0.02*breathe, 0.04, pb) + lookPitch * 0.45))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,1,0), lookYaw * 0.45))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,0,1), lookRoll * 0.45));
+  if(B.Head) B.Head.quaternion.copy(R.Head)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(1,0,0), lerp(-0.02 + 0.02*breathe, 0.03, pb) + lookPitch * 0.55))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,1,0), lookYaw * 0.55 + wb * 0.04 * sway))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(_axis.set(0,0,1), lookRoll * 0.55 + wb * 0.03 * breathe));
+
+  HUMAN.root.updateMatrixWorld(true);
+
+  /* --- ARMS --- */
+  captureBind(["LeftArm","LeftForeArm","LeftHand","RightArm","RightForeArm","RightHand"]);
+  captureHandBind();
+  const armZ = 35;
+  /* Orient the fists along the LINE they are holding, not along the stroke trajectory.
+     This used to use grip->gripLow (the down-and-back pull path, ~60° off horizontal), so
+     both wrists were rolled as if gripping a steeply diagonal rope while the visible thread
+     ran flat across the frame — which is what read as twisted hands. rdx/rdy already point
+     from the grip toward the load; screen y is inverted relative to world y. */
+  const ropeDirW = HAND.w.set(rdx, -rdy, 0.06).normalize();
+
+  /* Braced hold targets. Both sit ON the line (y === grip.y, give or take the small sag a
+     loaded hand puts in it) and are staggered along it like a tug-of-war grip: the lead
+     hand out toward the load, the trail hand drawn back in near the hip. The old idle
+     dropped the left hand 0.42 of an arm-length BELOW the rope, so it visibly held nothing. */
+  /* micro-drift: tiny lazy circular motion so idle hands don't look frozen */
+  const driftLX = wb * Math.sin(handDriftT) * 2.0;
+  const driftLY = wb * Math.cos(handDriftT * 1.3) * 1.5;
+  const holdLead  = { x: grip.x + reach*0.12 + driftLX, y: grip.y + reach*0.08 + breathe*reach*0.018 + driftLY };
+  /* trail hand stays anchored on the rope line near the chest */
+  const driftRX = wb * Math.sin(handDriftT * 0.8 + 1.5) * 2.5;
+  const driftRY = wb * Math.cos(handDriftT * 1.1 + 0.7) * 2.0;
+  const holdTrail = { x: grip.x - reach*0.04 + driftRX, y: grip.y + reach*0.06 + breathe*reach*0.015 + driftRY };
+
+  if(HAND.ready){
+    /* === LEFT ARM: lead hand, always closed on the thread === */
+    const handL = B.LeftHand;
+    if(handL && HUMAN.bind.LeftArm){
+      const lx = lerp(gA.x, holdLead.x, wb);
+      const ly = lerp(gA.y, holdLead.y, wb);
+      /* This is the far-side arm (its shoulder sits ~110 behind the near one), so it needs a
+         much larger forward push than the near arm to clear the chest: at armZ+14 the hand
+         landed at z 55 against a body centre of 48, i.e. inside the torso, and the elbow
+         finished behind it. */
+      const lzOut = Math.max(105, armZ + 40 + lerp(gA.st*25 + (gA.out||0)*16, 50, wb));
+      gA.z = lzOut;
+      handGripQuat("Left", ropeDirW, HAND.q);
+      HAND.v.copy(HAND.xL.Left).applyQuaternion(HAND.q).multiplyScalar(HAND.palm.Left);
+      _gT.set(vx(lx) - HAND.v.x, vy(ly) - HAND.v.y, lzOut - HAND.v.z);
+      /* elbow breaks away naturally down and back toward the lats */
+      _pole.set(-0.25, lerp(-0.85, -0.65, wb), lerp(-0.5, -0.65, wb)).normalize();
+      solveLimb("LeftArm", "LeftForeArm", "LeftHand", _gT, _pole, 0);
+      setBoneWorldQuat(handL, HAND.q);
+    }
+
+    /* === RIGHT ARM: trail hand on the line, or the microphone === */
+    const handR = B.RightHand;
+    if(handR && HUMAN.bind.RightArm){
+      /* Base hold position on rope: minimum 105px zOut depth clearance so hand never enters chest */
+      const rxBase = lerp(gB.x, holdTrail.x, wb);
+      const ryBase = lerp(gB.y, holdTrail.y, wb);
+      const pullZOffset = lerp(gB.st*30 + (gB.out||0)*20, 60, wb);
+      const zOutBase = Math.max(105, armZ + 45 + pullZOffset);
+
+      /* ---- Right-arm mic choreography, as one timeline ----
+             on the rope, fist closed
+          -> lets go, opens, and DIPS down                    FLY_IN, first ~40%
+          -> swings up to intercept the incoming mic          FLY_IN, remainder
+          -> closes around it                                 CATCH
+          -> holds it at the mask                             HELD
+          -> opens, the mic falls out of the hand             DROP
+          -> comes straight back down onto the rope           DROP fade
+         One weight says how far the arm is off the line, one point says where it goes. The
+         previous version stacked a frozen release pose, a second release clock and a separate
+         wrist-swing blend on top of this, which is what made the drop unreadable. */
+      const relT = MIC_STATE.releaseT;
+      const dropping = relT >= 0 && MIC_STATE.releasePose;
+      const DROP_RETURN = 0.45;                       // hand is back on the rope this fast
+
+      let micW = 0, wristW = 0, micHandX = rxBase, micHandY = ryBase, micHandZ = zOutBase, gripVal = 1.0;
+
+      if(dropping){
+        micW = 1 - easeIO(clamp(relT / DROP_RETURN, 0, 1));
+        wristW = micW;
+        micHandX = MIC_STATE.releasePose.x;
+        micHandY = MIC_STATE.releasePose.y;
+        micHandZ = Math.max(105, MIC_STATE.releasePose.z);
+        gripVal  = lerp(0.92, 0.12, clamp(relT / 0.10, 0, 1));   // let go, then stay open
+      } else if(MIC_STATE.active){
+        const ph = MIC_STATE.phase;
+        if(ph === "FLY_IN"){
+          const u = easeIO(clamp(MIC_STATE.t / 0.60, 0, 1));     // direct smooth rise arc to catch target
+          micW = u;
+          wristW = u;
+          micHandX = lerp(rxBase, MIC_STATE.pos.x, u);
+          micHandY = lerp(ryBase, MIC_STATE.pos.y + 12, u);
+          micHandZ = Math.max(105, lerp(zOutBase, MIC_STATE.pos.z, u));
+          gripVal  = 0.12;                                       // open receiving palm, waiting for mic
+        } else {                                                 // CATCH / HELD
+          micW = 1;
+          wristW = 1;
+          micHandX = MIC_STATE.pos.x;
+          micHandY = MIC_STATE.pos.y + 12;
+          micHandZ = Math.max(105, MIC_STATE.pos.z);
+          gripVal  = ph === "CATCH"
+            ? lerp(0.12, 0.92, easeIO(clamp(MIC_STATE.t / 0.10, 0, 1)))   // snaps shut on contact
+            : 0.92;
+        }
+      }
+
+      const rx = lerp(rxBase, micHandX, micW);
+      const ry = lerp(ryBase, micHandY, micW);
+      const zOut = lerp(zOutBase, micHandZ, micW);
+      gB.z = zOut;
+
+      if(micW > 0.001){
+        /* roll the wrist between the rope grip and the mic grip rather than switching styles */
+        handGripQuat("Right", ropeDirW, _qRope);
+        micGripQuat("Right", MIC_STATE.rotZ || 0.42, _qMic);
+        HAND.q.copy(_qRope).slerp(_qMic, wristW);   // wrist rolls in on the rise, not with micW
+        setMicGrip(lerp(1.0, gripVal, micW));       // -> a rope fist again as micW decays
+      } else {
+        handGripQuat("Right", ropeDirW, HAND.q);
+        setGrip("Right", 1.0);
+      }
+      HAND.v.copy(HAND.xL.Right).applyQuaternion(HAND.q).multiplyScalar(HAND.palm.Right);
+      _gT.set(vx(rx) - HAND.v.x, vy(ry) - HAND.v.y, zOut - HAND.v.z);
+      
+      /* Elbow swings OUT and slightly forward to keep the upper arm off the ribs, but stays
+         DOWN. The old target flared it to +0.35 in Y, which lifted the elbow above his head —
+         correct for the head-scratch gesture this pole was originally tuned for, absurd for
+         raising a mic to your mouth, where the elbow hangs by the ribs and only the forearm
+         travels. Same pole serves the catch, the hold and the drop. */
+      const activeW = micW;
+      const poleX = lerp(-0.15,  0.50, activeW);
+      const poleY = lerp(-0.95, -0.70, activeW);
+      const poleZ = lerp(-0.35,  0.25, activeW);
+      _pole.set(poleX, poleY, poleZ).normalize();
+
+      solveLimb("RightArm", "RightForeArm", "RightHand", _gT, _pole, 0);
+      setBoneWorldQuat(handR, HAND.q);
+    }
+  }
+
+  /* --- LEGS: wider stance under strain, relaxed when idle --- */
+  const fY = humanGroundY;
+  footDrift = Math.min(CFG.human.maxDrift * lerp(1.25, 1, wb), footDrift + effortS*CFG.human.driftPerTension*dt);
+  if(!STEP.active && footDrift - Math.min(footOff.Left, footOff.Right) > CFG.human.maxDrift*0.7){
+    STEP.active = true;
+    STEP.t = 0;
+    STEP.side = STEP.side === "Left" ? "Right" : "Left";
+    STEP.from = footOff[STEP.side];
+    STEP.to   = footDrift;
+  }
+  let stepLift = 0;
+  if(STEP.active){
+    STEP.t += dt/CFG.human.stepDur;
+    const k = clamp(STEP.t, 0, 1);
+    footOff[STEP.side] = lerp(STEP.from, STEP.to, easeIO(k));
+    stepLift = Math.sin(Math.PI*k)*CFG.human.stepLift;
+    if(STEP.t >= 1){
+      STEP.active = false;
+      const m = Math.min(footOff.Left, footOff.Right);
+      if(m > 0){ footOff.Left -= m; footOff.Right -= m; footDrift -= m; }
+    }
+  }
+
+  /* idle stance widens: front foot further forward, both feet spread for casual weight shift */
+  const idleSpread = wb * legL * 0.045;
+  const plant = {
+    Left : { x: humanX + HUMAN.stanceFront + footDrift - footOff.Left + idleSpread,  y: fY - (STEP.active&&STEP.side==="Left"  ? stepLift : 0) },
+    Right: { x: humanX - HUMAN.stanceBack  + footDrift - footOff.Right - idleSpread*0.3, y: fY - (STEP.active&&STEP.side==="Right" ? stepLift : 0) },
+  };
+
+  captureBind(["LeftUpLeg","LeftLeg","LeftFoot","RightUpLeg","RightLeg","RightFoot"]);
+  for(const side of ["Left","Right"]){
+    if(!B[side+"UpLeg"]) continue;
+    const pt=plant[side], front = side==="Left";
+    _gT.set(vx(pt.x), vy(pt.y), (front ? 30 + wb*10 : -34 - wb*6));
+    _pole.set(front ? 0.35 : 0.15, front ? 0.75 : 0.65, front ? 0.6 : 0.4).normalize();
+    const lift = STEP.active && STEP.side===side ? 0.5 : 0;
+    solveLimb(side+"UpLeg", side+"Leg", side+"Foot", _gT, _pole, 0.92 - lift*0.6);
+  }
+
+  /* --- thread bending & high-frequency tension ripples + stagger during superhero haul --- */
+  for(const [g, gp] of [[gA, A.grip * pb], [gB, Bs.grip * pb]]){
+    if(gp < 0.35) continue;
+    const sArc = (g.x - anchorL.x) * lenRatio;
+    if(sArc < 14 || sArc > rope.cum[rope.cum.length-1]-14) continue;
+    const loc = atLength(sArc);
+    /* High-frequency tension wave & stagger ratchet running along web thread */
+    const tensionRipple = Math.sin(T * 42 + sArc * 0.05) * 6 * stroke * pb + staggerY * 1.5;
+    addForceAt(loc, staggerX * 0.8, (g.y - loc.y) * CFG.human.ropeBend * 1.4 * gp + tensionRipple);
+  }
+
+  /* --- rope end yank --- */
+  tugPulse = stroke*E;
+  const yank = CFG.rope.tugAmp * 1.3 * tugPulse;   // more pronounced yank
+  anchorL.x = anchorBase.x - rdx*yank;
+  anchorL.y = anchorBase.y - rdy*yank;
+
+  const lo = A.s >= Bs.s ? gA : gB, hi = A.s >= Bs.s ? gB : gA;
+  fistHi.x = hi.x; fistHi.y = hi.y; fistHi.z = hi.z || 0;
+  fistLo.x = lo.x; fistLo.y = lo.y; fistLo.z = lo.z || 0;
+  fistW.x = hi.x;  fistW.y = hi.y;
+
+  /* sweat off the brow */
+  if(!reduced && B.Head){
+    const hp = bonePos(B.Head, IK.v0);
+    foreheadAbs = { x: hp.x + W/2, y: H/2 - hp.y };
+    sweatTimer -= dt;
+    if(E>0.42 && sweatTimer<=0){ sweatTimer=lerp(0.26,0.11,E); spawnSweat(E); }
+  }
+}
+
+function spawnSweat(E){
+  const d=sweat.find(s=>s.life<=0); if(!d) return;
+  const sc = HUMAN.scale*100;
+  d.x=foreheadAbs.x+(Math.random()*12-6);
+  d.y=foreheadAbs.y-6+(Math.random()*8-4);
+  d.z=40+Math.random()*30;
+  d.vx=(60+Math.random()*110)*(0.6+E);
+  d.vy=(-110-Math.random()*130)*(0.6+E);
+  d.life=0.8+Math.random()*0.4;
+  d.r=2.6+Math.random()*1.6;
+  d.m.visible=true;
+}
+function stepParticles(dt){
+  for(const d of sweat){
+    if(d.life<=0){ if(d.m.visible) d.m.visible=false; continue; }
+    d.life-=dt; d.vy+=1000*dt;
+    d.x+=d.vx*dt; d.y+=d.vy*dt;
+    d.mat.opacity=0.92*clamp(d.life*1.5,0,1);
+    const stretch=clamp(1+Math.abs(d.vy)/900,1,1.8);
+    d.m.position.set(vx(d.x), vy(d.y), d.z);
+    d.m.scale.set(d.r, d.r*stretch, d.r);
+    d.m.rotation.z=-Math.atan2(d.vy,d.vx)-Math.PI/2;
+  }
+}
+
+/* =====================================================================
+   CLOTH: hang each card off the line, blow wind through it
+   ===================================================================== */
+function placeCards(dt){
+  const total=DATA.length*step;
+  /* wind energy: ambient gust plus whatever Jerry is putting into the line */
+  const windE=clamp(0.34 + gust*0.7 + effortS*0.8, 0, 1.35);  // always a live breeze
+
+  for(let ci=0; ci<cards.length; ci++){
+    const c=cards[ci];
+    const k=Math.round((scroll-ci*step)/total);
+    const sMid=s0+(ci*step+k*total-scroll)*lenRatio;
+    const half=span*0.5*lenRatio;
+    const aL=atLength(sMid-half), aR=atLength(sMid+half);
+    const midX=(aL.x+aR.x)/2;
+
+    if(midX < -cardW*1.15 || midX > W+cardW*1.4){
+      if(c.visible){ c.visible=false; c.mesh.visible=false; c.threadL.visible=c.threadR.visible=false; c.ringL.visible=c.ringR.visible=false; }
+      c.pmx=midX; continue;
+    }
+    if(!c.visible){ c.visible=true; c.mesh.visible=true; c.threadL.visible=c.threadR.visible=true; c.ringL.visible=c.ringR.visible=true; c.pmx=midX; c.theta=0; c.thetaV=0; }
+
+    const ropeAng=Math.atan2(aR.y-aL.y, aR.x-aL.x);
+
+    /* both loops swing together, so the threads stay parallel */
+    const vxx=(midX-c.pmx)/dt, acc=(vxx-c.pvx)/dt;
+    c.pvx=vxx; c.pmx=midX;
+    
+    /* Stronger wind area for cards that have passed Spider-Man (midX < humanX) */
+    const isPassed = midX < humanX + cardW * 0.1;
+    if(!reduced){
+      const windMult  = isPassed ? 3.4 : 1.0;
+      const windFreq  = isPassed ? 3.8 : 1.9;
+      const swingKMult= isPassed ? 0.65 : 1.0;
+      const windTorque= gust * 2.6 * windMult * (0.7 + 0.5 * Math.sin(T * windFreq + c.phase));
+      c.thetaV += (-CFG.card.swingK * swingKMult * c.theta - CFG.card.swingDamp * c.thetaV
+                   - acc * CFG.card.swingInertia + windTorque) * dt;
+      c.theta = clamp(c.theta + c.thetaV * dt, -CFG.card.maxSwing * 1.4, CFG.card.maxSwing * 1.4);
+    } else c.theta = 0;
+
+    const downAng=ropeAng*0.55+Math.PI/2+c.theta;
+    const dnx=Math.cos(downAng), dny=Math.sin(downAng);   // "down" for this card
+    const sdx=-dny, sdy=dnx;                              // along its width
+
+    /* cloth vertices: u across the width, v down from the pinned top edge */
+    const cl=c.cloth, pos=cl.geo.attributes.position.array;
+    /* cards that passed Spider-Man experience stronger wind billow amplitude */
+    const windEPassed = isPassed ? windE * 2.2 : windE;
+    const amp=Math.min(cardH*CFG.card.waveAmp, cardW*0.085)*clamp(windEPassed,0,2.4);
+    const lenU=clamp(3.2*(cardW/cardH), 5, CFG.card.waveLenU);
+    const ph0=T*CFG.card.waveSpeed+c.phase;
+    const spanArc=span*lenRatio;
+    for(let i=0;i<=cl.segX;i++){
+      const uu=i/cl.segX;
+      /* the top edge rides the actual rope curve between the two loops */
+      const top=atLength(sMid-half+uu*spanArc);
+      const uEnv=Math.sin(Math.PI*uu);                    // zero at the pinned corners
+      for(let j=0;j<=cl.segY;j++){
+        const vv=j/cl.segY;
+        const dist=threadLen+vv*cardH;
+        /* cloth hangs BACK from the line as it descends: physically right for laundry, and
+           it keeps the sheet strictly behind the character's legs instead of through them */
+        const rake = -CFG.card.rake*Math.pow(vv, 0.85);
+        let px=top.x+dnx*dist, py=top.y+dny*dist, pz=0;
+        if(!reduced){
+          /* ramps away from the pinned top edge and corners, but never fully dies, so
+             folds travel through the whole cloth instead of only the hem */
+          const env=(0.12+0.88*Math.pow(vv,0.95))*(0.25+0.75*uEnv);
+          const phase=ph0+uu*lenU-vv*CFG.card.waveLenV;
+          const w1=Math.sin(phase), w2=Math.sin(phase*1.73+1.1);
+          pz=amp*env*(w1*0.90+w2*0.34);
+          /* billowing shortens the cloth in plane and lifts the free edge */
+          /* in-plane billow: the cloth gathers sideways and its free edge rides up and
+             down, which is what actually reads as wind from the front */
+          const shrink=amp*0.26*env*Math.cos(phase);
+          const rise  =amp*0.24*env*Math.sin(phase+0.9);
+          px += sdx*shrink + dnx*(rise - Math.abs(pz)*0.16);
+          py += sdy*shrink + dny*(rise - Math.abs(pz)*0.16);
+          /* the bottom corners furl */
+          const curl=CFG.card.curl*amp*Math.pow(vv,2.2)*(uu<0.5 ? (0.5-uu) : (uu-0.5))*2;
+          pz += curl*Math.sin(ph0*0.7+uu*3.1);
+        }
+        const o=(j*cl.nx+i)*3;
+        pos[o]=vx(px); pos[o+1]=vy(py); pos[o+2]=rake + Math.min(pz, vv>0.25 ? 0 : pz);
+      }
+    }
+    cl.geo.attributes.position.needsUpdate=true;
+    cl.geo.computeVertexNormals();
+
+    /* card weight pulls the line down where it hangs */
+    const wgt=CFG.card.weight;
+    addForceAt(aL, dnx*wgt*0.5, dny*wgt);
+    addForceAt(aR, dnx*wgt*0.5, dny*wgt);
+
+    /* loops on the rope + threads down to the cloth's own top corners */
+    const cornerL={ x:pos[0], y:pos[1], z:pos[2] };
+    const cornerR={ x:pos[cl.segX*3], y:pos[cl.segX*3+1], z:pos[cl.segX*3+2] };
+    setRing(c.ringL, aL); setRing(c.ringR, aR);
+    setThread(c.threadL, aL, cornerL);
+    setThread(c.threadR, aR, cornerR);
+  }
+}
+function setRing(m, a){
+  m.position.set(vx(a.x), vy(a.y), 0);
+  m.rotation.set(0, Math.PI/2, -a.ang);
+  m.scale.setScalar(Math.max(0.6, threadLen/22));
+}
+function setThread(g, a, corner){
+  const ax=vx(a.x), ay=vy(a.y);
+  const dx=corner.x-ax, dy=corner.y-ay;
+  const len=Math.hypot(dx,dy)||1;
+  g.position.set(ax, ay, corner.z*0.5);
+  g.rotation.z=Math.atan2(dy,dx);
+  g.scale.set(len/10, Math.max(0.5, threadLen/26), Math.max(0.5, threadLen/26));
+}
+
+/* =====================================================================
+   MAIN LOOP
+   ===================================================================== */
+let last=performance.now(), acc=0, ready=false;
+const FIXED=1/60;
+window.__jerry = { rope, cards, CFG, HUMAN, rings, SPEECH, reduced,
+  simStep: () => tick(FIXED),
+  ropeStep: () => drawRope(),
+  renderInfo: () => ({ triangles: renderer.info.render.triangles, calls: renderer.info.render.calls, programs: renderer.info.programs.length }),
+  get state(){ return {ready,W,H,cardW,cardH,step,scroll,index,T,u,effort,effortS,gust,
+    haulTravel,slackPay,leanS,gripL:gripS.Left,gripR:gripS.Right,footDrift,
+    footOffL:footOff.Left,footOffR:footOff.Right,stepping:STEP.active,stepSide:STEP.side}; } };
+
+function frame(now){
+  let dt=(now-last)/1000; last=now;
+  dt=Math.min(dt,1/20);
+  requestAnimationFrame(frame);
+  /* boot can land on a 0x0 stage (fonts still loading, layout not settled yet); rather than
+     wait on the ResizeObserver alone, keep retrying every frame until it takes */
+  if(!ready){ build(); return; }
+  if(step<=0) return;
+  acc+=dt;
+  let steps=0;
+  while(acc>=FIXED && steps<4){ tick(FIXED); acc-=FIXED; steps++; }
+  drawRope();
+  renderer.render(scene, camera);
+}
+
+function tick(dt){
+  T+=dt;
+  nextGust-=dt;
+  if(nextGust<=0){ nextGust=1.6+Math.random()*3.2; gustTarget=0.22+Math.random()*0.62; }
+  gust=lerp(gust, gustTarget, 1-Math.pow(0.001,dt));
+
+  const prev=lastScroll;
+  if(!drag.active && !reduced){
+    const a=(target-scroll)*CFG.motion.springK - scrollV*CFG.motion.springDamp;
+    scrollV+=a*dt; scroll+=scrollV*dt;
+  } else if(!drag.active && reduced){
+    scroll=lerp(scroll, target, 1-Math.pow(0.0005,dt));
+    scrollV=(scroll-prev)/dt;
+  } else scrollV=(scroll-prev)/dt;
+  const dScroll=scroll-prev;
+  lastScroll=scroll;
+
+  const idx=((Math.round(scroll/step)%DATA.length)+DATA.length)%DATA.length;
+  if(idx!==index){
+    index=idx;
+    dots.forEach((d,i)=>d.setAttribute("aria-current", i===index?"true":"false"));
+    syncWallpaperWithIndex(index);
+    document.dispatchEvent(new CustomEvent("spidey:cardchange", { detail:{ index } }));
+  }
+
+  const speedE=clamp(Math.abs(scrollV)/(step*1.2),0,1);
+  const holdE=drag.active ? clamp(Math.abs(drag.dx)/(step*0.35),0,1)*0.95 : 0;
+  effort=Math.max(speedE, holdE);
+  effortS=lerp(effortS, effort, 1-Math.pow(0.0001,dt));
+
+  haulTravel += dScroll*lenRatio;                       // rope run through her hands
+  slackPay = Math.max(0, slackPay + Math.max(0,dScroll)*0.11 - slackPay*2.2*dt);
+  slackPay = Math.min(slackPay, H*0.16);
+  u += (dScroll/(step/CFG.motion.cyclesPerCard));
+  u = ((u%1)+1)%1;
+
+  blinkAt-=dt;
+  if(blinkAt<=0){ blinkAt=2.4+Math.random()*3.4; blink=1; }
+  blink=Math.max(0, blink-dt*7.5);
+  nextTwitch-=dt;
+  if(nextTwitch<=0){ nextTwitch=2.6+Math.random()*4; earTwitch=1; }
+  earTwitch=Math.max(0, earTwitch-dt*5.5);
+
+  if(HUMAN.ready) poseHuman(dt);
+  placeCards(dt);
+  stepRope(dt, reduced ? 0 : gust, effortS);
+  stepParticles(dt);
+  speechTick(dt);
+  stepRings(dt);
+  stepMic(dt);
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+function build(){
+  if(!layout()) return false;
+  anchorL={ ...anchorBase };
+  for(let i=0;i<90;i++){ if(HUMAN.ready) poseHuman(FIXED); placeCards(FIXED); stepRope(FIXED, 0.2, 0); }
+  drawRope();
+  renderer.render(scene, camera);
+  ready=true;
+  return true;
+}
+function init(){
+  dots.forEach((d,i)=>d.setAttribute("aria-current", i===0?"true":"false"));
+  announce(0);
+  build();
+  requestAnimationFrame(frame);
+}
+/* the stage can measure 0x0 (hidden tab, zero-width preview pane, late fonts): the observer
+   both boots us late and keeps the geometry honest afterwards */
+let rzT;
+new ResizeObserver(() => {
+  clearTimeout(rzT);
+  rzT=setTimeout(() => {
+    if(!ready){ build(); return; }
+    const frac=step ? scroll/step : 0;
+    if(!layout()) return;
+    anchorL={ ...anchorBase };
+    scroll=frac*step; target=Math.round(frac)*step; scrollV=0;
+  }, 120);
+}).observe(stage);
+
+/* ---------- 1 Wallpaper Scene (Golden Gate Bridge) ---------- */
+const WALLPAPERS = [
+  { label: 'Golden Gate Bridge', url: 'assets/golden-gate.jpg', author: 'Joseph Barrientos' },
+];
+
+let currentWpIndex = -1;
+function syncWallpaperWithIndex(idx){
+  const wp = WALLPAPERS[0];
+  const backdropEl = document.getElementById('backdrop');
+  const creditEl = document.getElementById('imageCredit');
+  if(backdropEl){
+    backdropEl.style.backgroundImage = `url('${wp.url}')`;
+  }
+  if(creditEl){
+    creditEl.textContent = `Image Courtesy: ${wp.author}`;
+  }
+}
+
+/* The puller is a base64 GLB standing in for the character if spiderman.glb ever fails. It used
+   to load from a blocking <script> tag in the head, which cost every visitor 2.2MB of parse on
+   every load to service a path that, for a local file on the same origin, never runs. Fetch it
+   on demand instead — the failure path can afford one extra round trip. */
+function loadPullerFallback(){
+  const s = document.createElement("script");
+  s.src = "assets/puller.glb.js";
+  s.onload = () => {
+    if(!window.__PULLER_GLB_B64){ console.error("puller data missing after load"); return; }
+    try {
+      const bin = Uint8Array.from(atob(window.__PULLER_GLB_B64), c => c.charCodeAt(0)).buffer;
+      new THREE.GLTFLoader().parse(bin, "", initHuman, err2 => console.error("puller failed to parse", err2));
+    } catch(err2){ console.error("puller decode failed", err2); }
+  };
+  s.onerror = err => console.error("puller.glb.js failed to load", err);
+  document.head.appendChild(s);
+}
+
+/* Load character (Spider-Man GLB model with fallback to puller) */
+try {
+  new THREE.GLTFLoader().load('assets/spiderman.glb', initHuman, undefined, err => {
+    console.warn("spiderman.glb failed to load, using default puller fallback", err);
+    loadPullerFallback();
+  });
+} catch(err){ console.error("GLTFLoader execution error", err); }
+
+/* Load the studio mic. Non-blocking on purpose: micMesh already holds the procedural build, so
+   a Play that lands before this arrives just plays that round with the fallback. */
+try {
+  new THREE.GLTFLoader().load('assets/Mic.glb', initMic, undefined, err => {
+    console.warn("Mic.glb failed to load, keeping procedural microphone", err);
+  });
+} catch(err){ console.error("mic GLTFLoader execution error", err); }
+
+/* ---------- Play control: reads the testimony currently centred on the line ---------- */
+const playBtn   = document.getElementById('playBtn');
+const playLabel = document.getElementById('playLabel');
+
+/* The label names the speaker it will actually read, so the control is unambiguous while
+   several quotes are on screen at once. `index` is the card the line has settled on — the
+   dominant one — so this always matches what a Play press would speak. Re-rendered both when
+   the speech engine changes state and when the carousel lands on a new card. */
+function renderPlayControl(){
+  if(!playBtn) return;
+  const speaking = SPEECH.speaking;
+  const k = ((index % DATA.length) + DATA.length) % DATA.length;
+  const d = DATA[k] || DATA[0];
+  playBtn.classList.toggle('is-playing', speaking);
+  playBtn.setAttribute('aria-pressed', speaking ? 'true' : 'false');
+  playBtn.setAttribute('aria-label',
+    (speaking ? 'Stop testimony from ' : 'Play testimony from ') + d.name + ', ' + d.role);
+  if(playLabel){
+    playLabel.textContent = (speaking ? 'Stop Testimony — ' : 'Play Testimony — ') + d.name;
+    playLabel.title = d.name + ', ' + d.role;
+  }
+  if(dots && dots.length){
+    dots.forEach((b, i) => {
+      const active = i === k;
+      b.setAttribute('aria-selected', active ? 'true' : 'false');
+      b.setAttribute('aria-current', active ? 'true' : 'false');
+    });
+  }
+}
+/* speechStop/speechSpeak reach this through speechUI, including when an utterance ends on its
+   own or the browser cancels it. State is read from SPEECH rather than the argument. */
+function onSpeechState(){ renderPlayControl(); }
+
+const playOverlay = document.querySelector('.play-controls-overlay');
+const togglePlay = (e) => {
+  if(e) e.stopPropagation();
+  if(SPEECH.speaking) speechStop();
+  else speechSpeak(index);
+};
+if(playBtn) playBtn.addEventListener('click', togglePlay);
+if(playOverlay) {
+  playOverlay.style.cursor = 'pointer';
+  playOverlay.addEventListener('click', togglePlay);
+}
+if(SPEECH.supported && "speechSynthesis" in window){
+  window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+  window.speechSynthesis.getVoices();
+}
+renderPlayControl();
+
+/* hauling to another card should not leave the previous quote still being read, and the label
+   has to follow the new dominant card whether or not anything was playing */
+document.addEventListener('spidey:cardchange', () => {
+  if(SPEECH.speaking) speechStop();
+  renderPlayControl();
+});
+
+if(typeof ResizeObserver !== "undefined"){
+  const ro = new ResizeObserver(() => {
+    if(ready){
+      const frac = step ? scroll / step : 0;
+      layout();
+      scroll = frac * step;
+      target = Math.round(frac) * step;
+    }
+  });
+  ro.observe(stage);
+}
+
+init();
+}
+})();
+</script>
+</body>
+</html>

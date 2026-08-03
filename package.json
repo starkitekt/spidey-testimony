@@ -1,0 +1,22 @@
+{
+  "name": "spidey-testimonials",
+  "version": "1.0.0",
+  "description": "Spidey Testimonials - Interactive 3D Spider-Man Testimonial Clothesline",
+  "main": "index.html",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/starkitekt/spidey-testimony.git"
+  },
+  "keywords": [
+    "spidey",
+    "testimonials",
+    "threejs",
+    "webgl",
+    "spider-man"
+  ],
+  "author": "starkitekt",
+  "license": "MIT"
+}
